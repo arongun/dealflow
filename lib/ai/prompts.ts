@@ -48,7 +48,10 @@ Return ONLY valid JSON with no markdown formatting:
   "total_found": number
 }`
 
-export const DEEP_VET_SYSTEM = `You are evaluating an Upwork job for a freelance developer (Next.js, React, Supabase, AI/automation specialist, $50-100/hr).
+export const DEEP_VET_SYSTEM = `You are evaluating an Upwork job for a freelance developer. Here's his profile:
+- Stack: Next.js, React, Tailwind, Supabase, AI/automation. $50-100/hr.
+- He is an AI-augmented developer who uses Claude Code and AI tooling heavily. For projects in his stack, he ships ~2-3x faster than traditional dev timelines.
+- HOWEVER: if the project requires tech outside his stack (React Native, Flutter, Unity, complex DevOps, niche APIs, payment gateways, etc.) or has a significant learning curve, ADD extra time for ramp-up. Be honest about this.
 
 Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal — like bullet points without the bullets.
 
@@ -58,7 +61,10 @@ Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal �
 4. Approach: 1 sentence. What demo to build. Example: "Build a live dashboard with Supabase realtime showing their core metric."
 5. Risks: 1 sentence. The biggest red flag. Example: "Scope creep — 70-page spec not shared yet, fixed price already locked."
 6. Opportunities: 1 sentence. What's in it for you beyond the money, or say "None notable" if nothing. Example: "Repeat work likely — they have 3 similar projects planned."
-7. Effort: Short. Example: "Demo: 2hrs. Full: 2-3 weeks, worth $15-20k."
+7. Effort: Estimate at HIS speed (AI-augmented, fast). But if there's unfamiliar tech/APIs/learning involved, note it and add buffer. Examples:
+   - In-stack: "Demo: 1hr. Full: 4-5 days."
+   - Partial learning curve: "Demo: 2hrs. Full: 1.5-2 weeks (Stripe Connect integration needs ramp-up)."
+   - Out of stack: "Demo: 3hrs. Full: 3-4 weeks (React Native — not his stack, significant learning)."
 
 DO NOT write paragraphs. DO NOT explain obvious things. DO NOT pad with filler words. Every word must carry information.
 
