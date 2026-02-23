@@ -11,7 +11,7 @@ export const parsedJobSchema = z.object({
   proposals_count: z.string().nullable().optional().default(null),
   skills: z.array(z.string()).optional().default([]),
   posted_at: z.string().nullable().optional().default(null),
-  ai_score: z.number().min(1).max(10),
+  ai_score: z.number().min(1).max(5),
   ai_verdict: z.enum(['GO', 'NO-GO', 'NEEDS_REVIEW']),
   ai_reasoning: z.string(),
 })
@@ -22,7 +22,7 @@ export const parseResultSchema = z.object({
 })
 
 export const deepVetResultSchema = z.object({
-  deep_vet_score: z.number().min(1).max(10),
+  deep_vet_score: z.number().min(1).max(5),
   deep_vet_verdict: z.enum(['GO', 'NO-GO', 'NEEDS_REVIEW']),
   deep_vet_reasoning: z.string(),
   deep_vet_approach: z.string(),

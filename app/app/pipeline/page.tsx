@@ -136,8 +136,8 @@ function formatDate(dateStr: string | null | undefined): string {
 
 function getScoreColor(score: number | null | undefined): string {
   if (score == null) return 'text-zinc-500 bg-zinc-800'
-  if (score >= 7) return 'text-emerald-400 bg-emerald-500/10'
-  if (score >= 4) return 'text-amber-400 bg-amber-500/10'
+  if (score >= 3.5) return 'text-emerald-400 bg-emerald-500/10'
+  if (score >= 2.5) return 'text-amber-400 bg-amber-500/10'
   return 'text-red-400 bg-red-500/10'
 }
 

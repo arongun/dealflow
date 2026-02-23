@@ -14,7 +14,7 @@ For each job, extract:
 - skills: array of skill tags if shown
 - posted_at: when posted if shown (e.g. "2 hours ago", "yesterday")
 
-Then score each job 1-10 based on:
+Then score each job 1-5 based on:
 - Stack fit (Next.js, React, Supabase, AI, Node.js, TypeScript = high score)
 - Budget attractiveness (>$2k fixed or >$40/hr = good)
 - Client quality (high spend, good rating, low proposals = good)
@@ -22,9 +22,9 @@ Then score each job 1-10 based on:
 - Demo potential (can we build a quick impressive prototype?)
 
 Classify each as:
-- GO: score >= 7, strong fit, worth pursuing
-- NEEDS_REVIEW: score 4-6, might be worth it but needs full description
-- NO-GO: score < 4, wrong stack/budget/scope
+- GO: score >= 4, strong fit, worth pursuing
+- NEEDS_REVIEW: score 2.5-3.9, might be worth it but needs full description
+- NO-GO: score < 2.5, wrong stack/budget/scope
 
 For NO-GO, provide a brief reason (e.g. "Wrong stack: .NET/Angular", "Budget too low: $200", "Scope too large: 6-month enterprise rebuild")
 
@@ -51,7 +51,7 @@ Return ONLY valid JSON with no markdown formatting:
 export const DEEP_VET_SYSTEM = `You are evaluating an Upwork job for a freelance developer (Next.js, React, Supabase, AI/automation specialist, $50-100/hr).
 
 Analyze this job thoroughly and provide:
-1. Updated score (1-10) based on the full description
+1. Updated score (1-5) based on the full description
 2. Verdict: GO / NO-GO / NEEDS_REVIEW
 3. Detailed reasoning (3-5 sentences on why this is or isn't a good fit)
 4. Suggested approach: How should the developer build a demo to impress this client? What specific features to showcase? (2-3 sentences)
@@ -106,7 +106,7 @@ export function buildDeepVetUserMessage(job: {
 }): string {
   return `Job Title: ${job.title}
 Budget: ${job.budget_display || 'Not specified'}
-Initial Score: ${job.ai_score || 'N/A'}/10
+Initial Score: ${job.ai_score || 'N/A'}/5
 Client Info: Location: ${job.client_location || 'Unknown'}, Spend: ${job.client_spend || 'Unknown'}, Rating: ${job.client_rating || 'Unknown'}
 
 Full Job Description:

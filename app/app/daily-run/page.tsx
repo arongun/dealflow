@@ -75,8 +75,8 @@ const VERDICT_OPTIONS = ['GO', 'NEEDS_REVIEW', 'NO-GO'] as const
 // ── Helpers ────────────────────────────────────────────────────
 
 function scoreColor(score: number): string {
-  if (score >= 7) return 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
-  if (score >= 4) return 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+  if (score >= 3.5) return 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
+  if (score >= 2.5) return 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
   return 'text-red-400 bg-red-500/10 border border-red-500/20'
 }
 
@@ -786,7 +786,7 @@ export default function DailyRunPage() {
                             effectiveScore
                           )}`}
                         >
-                          {effectiveScore}/10
+                          {effectiveScore}/5
                         </span>
 
                         {/* Verdict badge with override display */}

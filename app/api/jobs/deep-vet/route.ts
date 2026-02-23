@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         job_id: job.id,
         action: 'deep_vet',
         new_value: result.data.deep_vet_verdict,
-        details: `Deep vet completed. Score: ${result.data.deep_vet_score}/10, Verdict: ${result.data.deep_vet_verdict}`,
+        details: `Deep vet completed. Score: ${result.data.deep_vet_score}/5, Verdict: ${result.data.deep_vet_verdict}`,
       })
 
       results.push({
