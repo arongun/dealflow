@@ -60,6 +60,7 @@ interface ParseResponse {
   total_no_go: number
   total_review: number
   total_blocked: number
+  total_pre_filtered: number
   jobs: DailyRunJob[]
 }
 
@@ -166,6 +167,9 @@ export default function DailyRunPage() {
 
   // Verdict override dropdown
   const [showVerdictDropdown, setShowVerdictDropdown] = useState<string | null>(null)
+
+  // Detail modal
+  const [detailJobId, setDetailJobId] = useState<string | null>(null)
 
   // ── Load saved searches on mount ─────────────────────────────
 
@@ -302,7 +306,8 @@ export default function DailyRunPage() {
       })
 
       setPhase('parsed')
-      toast(`Analysis complete: ${data.total_go} GO, ${data.total_review} to review`, 'success')
+      const preFilterMsg = data.total_pre_filtered > 0 ? `${data.total_pre_filtered} dupes skipped, ` : ''
+      toast(`Analysis complete: ${preFilterMsg}${data.total_go} GO, ${data.total_review} to review`, 'success')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to analyze jobs'
       toast(message, 'error')
@@ -726,10 +731,22 @@ export default function DailyRunPage() {
             <span className="text-zinc-300">
               Found <strong className="text-white">{parseSummary.total_found}</strong> jobs
             </span>
-            <ChevronRight />
-            <span className="text-zinc-400">
-              {parseSummary.total_blocked} already blocked
-            </span>
+            {parseSummary.total_pre_filtered > 0 && (
+              <>
+                <ChevronRight />
+                <span className="text-zinc-400">
+                  {parseSummary.total_pre_filtered} duplicates skipped
+                </span>
+              </>
+            )}
+            {parseSummary.total_blocked > 0 && (
+              <>
+                <ChevronRight />
+                <span className="text-zinc-400">
+                  {parseSummary.total_blocked} blocked
+                </span>
+              </>
+            )}
             <ChevronRight />
             <span className="text-zinc-300">
               <strong className="text-white">{parseSummary.total_parsed}</strong> analyzed
@@ -910,6 +927,15 @@ export default function DailyRunPage() {
                             </div>
                           )}
                         </div>
+
+                        {/* Expand details button */}
+                        <button
+                          onClick={() => setDetailJobId(job.id)}
+                          className="rounded-md bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400 transition hover:bg-zinc-700 hover:text-zinc-300"
+                          title="View full details"
+                        >
+                          Details
+                        </button>
 
                         {/* Status badges */}
                         {status === 'waiting' && (
@@ -1307,6 +1333,267 @@ export default function DailyRunPage() {
           </p>
         </div>
       )}
+
+      {/* ─── Detail Modal ─────────────────────────────────────── */}
+      {detailJobId && (() => {
+        const job = jobs.find(j => j.id === detailJobId)
+        if (!job) return null
+        const content = generatedContent[job.id]
+        const isGenerating = generatingJobs[job.id]
+        const status = jobStatuses[job.id]
+        const hasDeepVet = job.deep_vet_score !== null
+        const originalVerdict = hasDeepVet ? (job.deep_vet_verdict ?? job.ai_verdict) : job.ai_verdict
+        const effectiveVerdict = job.verdict_override ?? originalVerdict
+        const effectiveScore = hasDeepVet ? (job.deep_vet_score ?? job.ai_score) : job.ai_score
+        const searchName = savedSearches.find(s => s.id === job.saved_search_id)?.name
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setDetailJobId(null)}>
+            <div className="absolute inset-0 bg-black/60" />
+            <div
+              className="relative z-10 mx-4 flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal header */}
+              <div className="flex items-start justify-between border-b border-zinc-800 px-6 py-4">
+                <div className="min-w-0 flex-1 pr-4">
+                  <h2 className="text-lg font-semibold text-white">{job.title}</h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+                    {searchName && <span className="text-blue-400">{searchName}</span>}
+                    {job.budget_display && <span className="text-zinc-400">{job.budget_display}</span>}
+                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-medium ${scoreColor(effectiveScore)}`}>
+                      {effectiveScore}/5
+                    </span>
+                    <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-medium ${verdictBadgeBg(effectiveVerdict)} ${verdictTextColor(effectiveVerdict)}`}>
+                      {verdictLabel(effectiveVerdict)}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDetailJobId(null)}
+                  className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Modal body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {/* Client info grid */}
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  {job.client_location && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                      <span className="block text-zinc-600">Location</span>
+                      <span className="text-zinc-300">{job.client_location}</span>
+                    </div>
+                  )}
+                  {job.client_spend && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                      <span className="block text-zinc-600">Spend</span>
+                      <span className="text-zinc-300">{job.client_spend}</span>
+                    </div>
+                  )}
+                  {job.client_rating != null && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                      <span className="block text-zinc-600">Rating</span>
+                      <span className="text-zinc-300">{job.client_rating}</span>
+                    </div>
+                  )}
+                  {job.proposals_count != null && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                      <span className="block text-zinc-600">Proposals</span>
+                      <span className="text-zinc-300">{job.proposals_count}</span>
+                    </div>
+                  )}
+                  {job.posted_at && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                      <span className="block text-zinc-600">Posted</span>
+                      <span className="text-zinc-300">{formatPostedAt(job.posted_at)}</span>
+                    </div>
+                  )}
+                  {job.budget_type && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
+                      <span className="block text-zinc-600">Type</span>
+                      <span className="text-zinc-300">{job.budget_type}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Skills */}
+                {job.skills && job.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {job.skills.map((skill) => (
+                      <span key={skill} className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Description snippet */}
+                {job.description_snippet && (
+                  <div>
+                    <h4 className="mb-1 text-xs font-medium text-zinc-500">Description</h4>
+                    <p className="text-sm text-zinc-400 leading-relaxed">{job.description_snippet}</p>
+                  </div>
+                )}
+
+                {/* Full description */}
+                {job.full_description && (
+                  <div>
+                    <h4 className="mb-1 text-xs font-medium text-zinc-500">Full Job Description</h4>
+                    <pre className="max-h-48 overflow-auto rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap">
+                      {job.full_description}
+                    </pre>
+                  </div>
+                )}
+
+                {/* AI Reasoning */}
+                <div>
+                  <h4 className="mb-1 text-xs font-medium text-zinc-500">AI Reasoning</h4>
+                  <p className="text-sm text-zinc-300 leading-relaxed">
+                    {hasDeepVet ? (job.deep_vet_reasoning ?? job.ai_reasoning) : job.ai_reasoning}
+                  </p>
+                </div>
+
+                {/* Deep vet details */}
+                {hasDeepVet && (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    {job.deep_vet_approach && (
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+                        <p className="mb-1 text-xs font-medium text-zinc-500">Approach</p>
+                        <p className="text-sm text-zinc-300">{job.deep_vet_approach}</p>
+                      </div>
+                    )}
+                    {job.deep_vet_risks && (
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+                        <p className="mb-1 text-xs font-medium text-zinc-500">Risks</p>
+                        <p className="text-sm text-zinc-300">{job.deep_vet_risks}</p>
+                      </div>
+                    )}
+                    {job.deep_vet_opportunities && (
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+                        <p className="mb-1 text-xs font-medium text-zinc-500">Opportunities</p>
+                        <p className="text-sm text-zinc-300">{job.deep_vet_opportunities}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Effort */}
+                {job.ai_estimated_effort && (
+                  <div className="inline-flex items-center gap-1.5 rounded-md bg-blue-500/10 px-2.5 py-1 text-xs text-blue-400">
+                    {job.ai_estimated_effort}
+                  </div>
+                )}
+
+                {/* Upwork link */}
+                {job.upwork_link && (
+                  <a
+                    href={job.upwork_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Open on Upwork
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
+                  </a>
+                )}
+
+                {/* Generated content preview */}
+                {content && !isGenerating && (
+                  <div className="space-y-3">
+                    {content.prompt && (
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="text-xs font-medium text-zinc-500">Claude Code Prompt</span>
+                          <CopyButton text={editedPrompts[job.id] ?? content.prompt} label="Copy" />
+                        </div>
+                        <textarea
+                          value={editedPrompts[job.id] ?? content.prompt}
+                          onChange={(e) => setEditedPrompts((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                          className="max-h-[300px] min-h-[150px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs text-zinc-300 outline-none transition focus:border-zinc-500"
+                        />
+                      </div>
+                    )}
+                    {content.script && (
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="text-xs font-medium text-zinc-500">Loom Script</span>
+                          <CopyButton text={editedScripts[job.id] ?? content.script} label="Copy" />
+                        </div>
+                        <textarea
+                          value={editedScripts[job.id] ?? content.script}
+                          onChange={(e) => setEditedScripts((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                          className="max-h-[300px] min-h-[150px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs text-zinc-300 outline-none transition focus:border-zinc-500"
+                        />
+                      </div>
+                    )}
+                    {content.proposal && (
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="text-xs font-medium text-zinc-500">Proposal Text</span>
+                          <CopyButton text={editedProposals[job.id] ?? content.proposal} label="Copy" />
+                        </div>
+                        <textarea
+                          value={editedProposals[job.id] ?? content.proposal}
+                          onChange={(e) => setEditedProposals((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                          className="max-h-[200px] min-h-[80px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-900 p-3 text-xs text-zinc-300 outline-none transition focus:border-zinc-500"
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => handleSaveContent(job.id)}
+                        disabled={savingContent[job.id]}
+                        className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {savingContent[job.id] ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal footer — action buttons */}
+              {status === 'active' && hasDeepVet && phase === 'deep-vetted' && (
+                <div className="flex items-center gap-2 border-t border-zinc-800 px-6 py-4">
+                  <button
+                    onClick={() => { handleGo(job, 'build'); setDetailJobId(null) }}
+                    disabled={isGenerating}
+                    className="rounded-lg bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-400 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isGenerating ? 'Generating...' : 'GO — Build Demo'}
+                  </button>
+                  <button
+                    onClick={() => { handleGo(job, 'loom_only'); setDetailJobId(null) }}
+                    disabled={isGenerating}
+                    className="rounded-lg bg-blue-500/20 px-4 py-2 text-sm font-medium text-blue-400 transition hover:bg-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    GO — Loom Only
+                  </button>
+                  <button
+                    onClick={() => { handleWait(job.id); setDetailJobId(null) }}
+                    className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-400 transition hover:bg-zinc-700 hover:text-zinc-300"
+                  >
+                    Wait
+                  </button>
+                  <button
+                    onClick={() => { handleSkipConfirm(job.id); setDetailJobId(null) }}
+                    className="rounded-lg bg-red-500/20 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                  >
+                    Skip
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
     </div>
   )

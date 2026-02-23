@@ -57,7 +57,7 @@ Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal �
 
 1. Score (1-5)
 2. Verdict: GO / NO-GO / NEEDS_REVIEW
-3. Reasoning: 1-2 short sentences MAX. Why it's good or bad. Lead with the most important signal. Example: "$0 spend, unknown rating — never hired anyone. Budget is 3x below market for this scope."
+3. Reasoning: Start with a plain-English TLDR of what they actually want built (1 short sentence), THEN 1-2 sentences on why it's good or bad. Example: "They want a real-time fire scanner that listens to radio streams and texts alerts. $1K is 30-40% below market for this scope — Whisper, Twilio, web dashboard, Windows service."
 4. Approach: 1 sentence. What demo to build. Example: "Build a live dashboard with Supabase realtime showing their core metric."
 5. Risks: 1 sentence. The biggest red flag. Example: "Scope creep — 70-page spec not shared yet, fixed price already locked."
 6. Opportunities: 1 sentence. What's in it for you beyond the money, or say "None notable" if nothing. Example: "Repeat work likely — they have 3 similar projects planned."
