@@ -68,7 +68,7 @@ interface GeneratedContent {
 }
 
 type Phase = 'input' | 'parsed' | 'deep-vetted'
-type JobStatus = 'active' | 'skipped' | 'rejected' | 'waiting' | 'went-go'
+type JobStatus = 'active' | 'skipped' | 'waiting' | 'went-go'
 
 const VERDICT_OPTIONS = ['GO', 'NEEDS_REVIEW', 'NO-GO'] as const
 
@@ -131,10 +131,9 @@ export default function DailyRunPage() {
   // Per-job status state
   const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatus>>({})
 
-  // Notes modal state (for skip & reject)
+  // Notes modal state (for skip)
   const [noteModal, setNoteModal] = useState<{
     jobId: string
-    action: 'skip' | 'reject'
     notes: string
   } | null>(null)
 
@@ -275,7 +274,6 @@ export default function DailyRunPage() {
       (j) =>
         fullDescriptions[j.id]?.trim() &&
         jobStatuses[j.id] !== 'skipped' &&
-        jobStatuses[j.id] !== 'rejected' &&
         jobStatuses[j.id] !== 'went-go' &&
         jobStatuses[j.id] !== 'waiting'
     )
@@ -462,28 +460,6 @@ export default function DailyRunPage() {
     [toast]
   )
 
-  const handleRejectConfirm = useCallback(
-    async (jobId: string, notes: string) => {
-      try {
-        await fetch(`/api/jobs/${jobId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pipeline_stage: 'rejected',
-            rejection_reason: notes.trim() || 'Rejected during daily run',
-            notes: notes.trim() || undefined,
-          }),
-        })
-        setJobStatuses((prev) => ({ ...prev, [jobId]: 'rejected' }))
-        setNoteModal(null)
-        toast('Job rejected', 'info')
-      } catch {
-        toast('Failed to reject job', 'error')
-      }
-    },
-    [toast]
-  )
-
   const handleSkipConfirm = useCallback(
     async (jobId: string, notes: string) => {
       try {
@@ -525,22 +501,34 @@ export default function DailyRunPage() {
 
   const handleVerdictOverride = useCallback(
     async (jobId: string, newVerdict: string) => {
+      // Find the original AI verdict for this job
+      const job = jobs.find((j) => j.id === jobId)
+      const origVerdict = job
+        ? (job.deep_vet_verdict ?? job.ai_verdict)
+        : null
+      // If the new verdict matches the original, store NULL (no override)
+      const valueToStore = newVerdict === origVerdict ? null : newVerdict
+
       try {
         await fetch(`/api/jobs/${jobId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ verdict_override: newVerdict }),
+          body: JSON.stringify({ verdict_override: valueToStore }),
         })
         setJobs((prev) =>
-          prev.map((j) => (j.id === jobId ? { ...j, verdict_override: newVerdict } : j))
+          prev.map((j) => (j.id === jobId ? { ...j, verdict_override: valueToStore } : j))
         )
         setShowVerdictDropdown(null)
-        toast(`Verdict overridden to ${verdictLabel(newVerdict)}`, 'success')
+        if (valueToStore) {
+          toast(`Verdict overridden to ${verdictLabel(valueToStore)}`, 'success')
+        } else {
+          toast('Verdict reset to AI verdict', 'info')
+        }
       } catch {
         toast('Failed to override verdict', 'error')
       }
     },
-    [toast]
+    [jobs, toast]
   )
 
   // ── Derived state ───────────────────────────────────────────
@@ -548,12 +536,11 @@ export default function DailyRunPage() {
   const deepVetReady = jobs.some(
     (j) =>
       fullDescriptions[j.id]?.trim() &&
-      jobStatuses[j.id] !== 'skipped' &&
-      jobStatuses[j.id] !== 'rejected'
+      jobStatuses[j.id] !== 'skipped'
   )
 
   const activeJobs = jobs.filter(
-    (j) => jobStatuses[j.id] !== 'skipped' && jobStatuses[j.id] !== 'rejected'
+    (j) => jobStatuses[j.id] !== 'skipped'
   )
 
   // ── Reset ───────────────────────────────────────────────────
@@ -946,22 +933,14 @@ export default function DailyRunPage() {
                             className="min-h-[120px] w-full resize-y rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
                           />
                         </div>
-                        <div className="flex justify-end gap-3">
+                        <div className="flex justify-end">
                           <button
                             onClick={() =>
-                              setNoteModal({ jobId: job.id, action: 'skip', notes: '' })
+                              setNoteModal({ jobId: job.id, notes: '' })
                             }
                             className="text-sm text-zinc-500 transition hover:text-zinc-300"
                           >
                             Skip
-                          </button>
-                          <button
-                            onClick={() =>
-                              setNoteModal({ jobId: job.id, action: 'reject', notes: '' })
-                            }
-                            className="text-sm text-red-400/70 transition hover:text-red-400"
-                          >
-                            Reject
                           </button>
                         </div>
                       </div>
@@ -995,14 +974,6 @@ export default function DailyRunPage() {
                             GO — Loom Only
                           </button>
                           <button
-                            onClick={() =>
-                              setNoteModal({ jobId: job.id, action: 'reject', notes: '' })
-                            }
-                            className="rounded-lg bg-red-500/20 px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
-                          >
-                            Reject
-                          </button>
-                          <button
                             onClick={() => handleWait(job.id)}
                             className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-400 transition hover:bg-zinc-700 hover:text-zinc-300"
                           >
@@ -1010,7 +981,7 @@ export default function DailyRunPage() {
                           </button>
                           <button
                             onClick={() =>
-                              setNoteModal({ jobId: job.id, action: 'skip', notes: '' })
+                              setNoteModal({ jobId: job.id, notes: '' })
                             }
                             className="text-sm text-zinc-500 transition hover:text-zinc-300"
                           >
@@ -1027,15 +998,7 @@ export default function DailyRunPage() {
                           <span className="text-xs text-zinc-500 italic">No deep vet data</span>
                           <button
                             onClick={() =>
-                              setNoteModal({ jobId: job.id, action: 'reject', notes: '' })
-                            }
-                            className="rounded-lg bg-red-500/20 px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() =>
-                              setNoteModal({ jobId: job.id, action: 'skip', notes: '' })
+                              setNoteModal({ jobId: job.id, notes: '' })
                             }
                             className="text-sm text-zinc-500 transition hover:text-zinc-300"
                           >
@@ -1134,13 +1097,9 @@ export default function DailyRunPage() {
       {noteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
-            <h3 className="text-base font-medium text-white">
-              {noteModal.action === 'reject' ? 'Reject Job' : 'Skip Job'}
-            </h3>
+            <h3 className="text-base font-medium text-white">Skip Job</h3>
             <p className="mt-1 text-sm text-zinc-400">
-              {noteModal.action === 'reject'
-                ? 'Add a note explaining why this job was rejected. This helps improve future scoring.'
-                : 'Add a note explaining why you\'re skipping this job. This helps improve future scoring.'}
+              Add an optional note — this helps improve future AI scoring over time.
             </p>
             <textarea
               autoFocus
@@ -1148,19 +1107,11 @@ export default function DailyRunPage() {
               onChange={(e) =>
                 setNoteModal({ ...noteModal, notes: e.target.value })
               }
-              placeholder={
-                noteModal.action === 'reject'
-                  ? 'e.g. Budget too low, scope too vague, not in our niche...'
-                  : 'e.g. Not enough info, will revisit later, client seems risky...'
-              }
+              placeholder="e.g. Budget too low, scope too vague, not in our niche..."
               className="mt-4 min-h-[100px] w-full resize-y rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  if (noteModal.action === 'reject') {
-                    handleRejectConfirm(noteModal.jobId, noteModal.notes)
-                  } else {
-                    handleSkipConfirm(noteModal.jobId, noteModal.notes)
-                  }
+                  handleSkipConfirm(noteModal.jobId, noteModal.notes)
                 }
               }}
             />
@@ -1174,20 +1125,10 @@ export default function DailyRunPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    if (noteModal.action === 'reject') {
-                      handleRejectConfirm(noteModal.jobId, noteModal.notes)
-                    } else {
-                      handleSkipConfirm(noteModal.jobId, noteModal.notes)
-                    }
-                  }}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                    noteModal.action === 'reject'
-                      ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                      : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
-                  }`}
+                  onClick={() => handleSkipConfirm(noteModal.jobId, noteModal.notes)}
+                  className="rounded-lg bg-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-600"
                 >
-                  {noteModal.action === 'reject' ? 'Reject' : 'Skip'}
+                  Skip
                 </button>
               </div>
             </div>

@@ -289,10 +289,12 @@ export default function PipelinePage() {
   const patchField = useCallback(
     async (jobId: string, field: string, value: string) => {
       try {
+        // For verdict_override, empty string means "reset to null"
+        const patchValue = field === 'verdict_override' && value === '' ? null : value
         const res = await fetch(`/api/jobs/${jobId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [field]: value }),
+          body: JSON.stringify({ [field]: patchValue }),
         })
         if (res.ok) {
           const updated: Job = await res.json()
@@ -774,7 +776,9 @@ function SlideOverPanel({
                           <button
                             key={v}
                             onClick={() => {
-                              onPatchField(job.id, 'verdict_override', v)
+                              // Store NULL if same as original (no real override)
+                              const val = v === originalVerdict ? '' : v
+                              onPatchField(job.id, 'verdict_override', val)
                               setShowVerdictMenu(false)
                             }}
                             className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition hover:bg-zinc-700 ${
@@ -795,7 +799,7 @@ function SlideOverPanel({
                             <div className="my-1 border-t border-zinc-700" />
                             <button
                               onClick={() => {
-                                onPatchField(job.id, 'verdict_override', originalVerdict ?? '')
+                                onPatchField(job.id, 'verdict_override', '')
                                 setShowVerdictMenu(false)
                               }}
                               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-400 transition hover:bg-zinc-700"
