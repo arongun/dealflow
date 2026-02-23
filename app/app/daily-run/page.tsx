@@ -393,8 +393,8 @@ export default function DailyRunPage() {
       setGeneratingJobs((prev) => ({ ...prev, [job.id]: true }))
 
       try {
-        // Update pipeline stage
-        await fetch(`/api/jobs/${job.id}`, {
+        // Update pipeline stage (server auto-computes verdict_override)
+        const stageRes = await fetch(`/api/jobs/${job.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -402,6 +402,14 @@ export default function DailyRunPage() {
             build_type: buildType,
           }),
         })
+        if (stageRes.ok) {
+          const updated = await stageRes.json()
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === job.id ? { ...j, verdict_override: updated.verdict_override } : j
+            )
+          )
+        }
 
         const content: GeneratedContent = {}
 

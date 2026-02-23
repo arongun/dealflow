@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { jobUpdateSchema } from '@/lib/schemas'
 
+// Auto-compute verdict_override when pipeline stage changes
+// Only fires for verdict-significant stages (go, rejected)
+function computeAutoOverride(
+  newStage: string,
+  aiVerdict: string | null,
+  deepVetVerdict: string | null
+): string | null | undefined {
+  if (newStage !== 'go' && newStage !== 'rejected') return undefined // don't touch
+
+  const baseVerdict = deepVetVerdict ?? aiVerdict
+  if (!baseVerdict) return undefined
+
+  if (newStage === 'go') {
+    // User approves — override only if AI disagreed
+    return baseVerdict === 'GO' ? null : 'GO'
+  }
+
+  if (newStage === 'rejected') {
+    // User rejects — override only if AI disagreed
+    return baseVerdict === 'NO-GO' ? null : 'NO-GO'
+  }
+
+  return undefined
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -44,16 +69,36 @@ export async function PATCH(
     )
   }
 
-  // Get current job for history tracking
+  // Get current job for history tracking + auto-override computation
   const { data: currentJob } = await supabase
     .from('jobs')
-    .select('pipeline_stage, ai_verdict, verdict_override')
+    .select('pipeline_stage, ai_verdict, deep_vet_verdict, verdict_override')
     .eq('id', id)
     .single()
 
+  // Build update payload — may include auto-computed verdict_override
+  const updateData: Record<string, unknown> = { ...parsed.data }
+
+  if (
+    parsed.data.pipeline_stage &&
+    currentJob &&
+    parsed.data.pipeline_stage !== currentJob.pipeline_stage
+  ) {
+    const autoOverride = computeAutoOverride(
+      parsed.data.pipeline_stage,
+      currentJob.ai_verdict,
+      currentJob.deep_vet_verdict
+    )
+    // undefined = don't touch, null = clear override, string = set override
+    if (autoOverride !== undefined && parsed.data.verdict_override === undefined) {
+      // Only auto-compute if the client didn't explicitly send a verdict_override
+      updateData.verdict_override = autoOverride
+    }
+  }
+
   const { data, error } = await supabase
     .from('jobs')
-    .update(parsed.data)
+    .update(updateData)
     .eq('id', id)
     .select()
     .single()
@@ -73,15 +118,19 @@ export async function PATCH(
     })
   }
 
-  // Log verdict override changes
-  if (parsed.data.verdict_override !== undefined && parsed.data.verdict_override !== currentJob?.verdict_override) {
+  // Log verdict override changes (catches both manual and auto-computed)
+  const finalOverride = updateData.verdict_override
+  if (finalOverride !== undefined && finalOverride !== currentJob?.verdict_override) {
     const oldVerdict = currentJob?.verdict_override ?? currentJob?.ai_verdict ?? 'unknown'
+    const wasAuto = parsed.data.verdict_override === undefined && finalOverride !== undefined
     await supabase.from('job_history').insert({
       job_id: id,
       action: 'verdict_override',
       old_value: oldVerdict,
-      new_value: parsed.data.verdict_override,
-      details: `Verdict manually overridden from ${oldVerdict} to ${parsed.data.verdict_override}`,
+      new_value: finalOverride as string | null,
+      details: wasAuto
+        ? `Verdict auto-adjusted to ${finalOverride ?? 'AI verdict'} (stage → ${parsed.data.pipeline_stage})`
+        : `Verdict manually overridden from ${oldVerdict} to ${finalOverride}`,
     })
   }
 
