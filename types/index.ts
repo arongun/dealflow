@@ -102,6 +102,7 @@ export interface RunHistory {
   total_no_go: number
   total_review: number
   total_blocked: number
+  total_pre_filtered: number
   duration_ms: number | null
   created_at: string
 }

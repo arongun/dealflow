@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { callClaude, extractJSON } from '@/lib/ai/claude'
 import { BULK_PARSE_SYSTEM } from '@/lib/ai/prompts'
 import { bulkParseInputSchema, parseResultSchema, parsedJobSchema } from '@/lib/schemas'
-import { generateDedupHash } from '@/lib/dedup'
+import { generateDedupHash, splitRawTextIntoChunks, extractChunkIdentity } from '@/lib/dedup'
 
 function resolveRelativeTime(relativeStr: string | null | undefined): string | null {
   if (!relativeStr) return null
@@ -69,10 +69,80 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
 
   try {
-    // Call Claude to parse the raw text
+    // ── Pre-AI Dedup: split text into chunks and filter out known jobs ──
+    const chunks = splitRawTextIntoChunks(raw_text)
+    let totalPreFiltered = 0
+    let textForClaude = raw_text
+
+    // Load hashes from BOTH block_list AND jobs tables
+    const [{ data: blockList }, { data: existingJobs }] = await Promise.all([
+      supabase.from('block_list').select('dedup_hash'),
+      supabase.from('jobs').select('dedup_hash'),
+    ])
+
+    const knownHashes = new Set<string>()
+    for (const b of blockList ?? []) {
+      if (b.dedup_hash) knownHashes.add(b.dedup_hash)
+    }
+    for (const j of existingJobs ?? []) {
+      if (j.dedup_hash) knownHashes.add(j.dedup_hash)
+    }
+
+    if (chunks.length > 0) {
+      const newChunks: string[] = []
+
+      for (const chunk of chunks) {
+        const identity = extractChunkIdentity(chunk)
+        if (!identity) {
+          // Can't extract identity — include it to be safe
+          newChunks.push(chunk)
+          continue
+        }
+
+        const hash = generateDedupHash(identity.title, identity.descSnippet)
+        if (knownHashes.has(hash)) {
+          totalPreFiltered++
+        } else {
+          newChunks.push(chunk)
+        }
+      }
+
+      // If all chunks are dupes, return early without calling Claude
+      if (newChunks.length === 0) {
+        // Save run history
+        const duration = Date.now() - startTime
+        await supabase.from('run_history').insert({
+          saved_search_id,
+          saved_search_name: null,
+          total_pasted: chunks.length,
+          total_parsed: 0,
+          total_go: 0,
+          total_no_go: 0,
+          total_review: 0,
+          total_blocked: 0,
+          total_pre_filtered: totalPreFiltered,
+          duration_ms: duration,
+        })
+
+        return NextResponse.json({
+          total_found: chunks.length,
+          total_parsed: 0,
+          total_go: 0,
+          total_no_go: 0,
+          total_review: 0,
+          total_blocked: 0,
+          total_pre_filtered: totalPreFiltered,
+          jobs: [],
+        })
+      }
+
+      textForClaude = newChunks.join('\n')
+    }
+
+    // ── Call Claude to parse the (filtered) raw text ──
     const raw = await callClaude(
       BULK_PARSE_SYSTEM,
-      raw_text,
+      textForClaude,
       { maxTokens: 8192 }
     )
 
@@ -111,14 +181,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get existing block list hashes for dedup
-    const { data: blockList } = await supabase
-      .from('block_list')
-      .select('dedup_hash')
-
-    const blockedHashes = new Set(
-      (blockList ?? []).map((b: any) => b.dedup_hash).filter(Boolean)
-    )
+    // ── Post-AI Dedup (safety net) — checks both tables via knownHashes ──
 
     const goJobs: any[] = []
     const noGoJobs: any[] = []
@@ -128,8 +191,8 @@ export async function POST(request: NextRequest) {
     for (const job of aiJobs) {
       const hash = generateDedupHash(job.title, job.description_snippet)
 
-      // Check dedup
-      if (blockedHashes.has(hash)) {
+      // Post-AI dedup: check against both block_list and jobs tables
+      if (knownHashes.has(hash)) {
         blockedCount++
         continue
       }
@@ -220,22 +283,24 @@ export async function POST(request: NextRequest) {
     await supabase.from('run_history').insert({
       saved_search_id,
       saved_search_name: null,
-      total_pasted: totalFound,
+      total_pasted: totalFound + totalPreFiltered,
       total_parsed: aiJobs.length,
       total_go: goJobs.length,
       total_no_go: noGoJobs.length,
       total_review: reviewJobs.length,
       total_blocked: blockedCount,
+      total_pre_filtered: totalPreFiltered,
       duration_ms: duration,
     })
 
     return NextResponse.json({
-      total_found: totalFound,
+      total_found: totalFound + totalPreFiltered,
       total_parsed: aiJobs.length,
       total_go: goJobs.length,
       total_no_go: noGoJobs.length,
       total_review: reviewJobs.length,
       total_blocked: blockedCount,
+      total_pre_filtered: totalPreFiltered,
       jobs: insertedJobs,
     })
   } catch (err: any) {
