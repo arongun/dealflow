@@ -927,6 +927,10 @@ export default function DailyRunPage() {
 
                     {/* Job details row */}
                     <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+                      {job.saved_search_id && (() => {
+                        const search = savedSearches.find(s => s.id === job.saved_search_id)
+                        return search ? <span className="text-blue-400">{search.name}</span> : null
+                      })()}
                       {job.client_location && (
                         <span>{job.client_location}</span>
                       )}

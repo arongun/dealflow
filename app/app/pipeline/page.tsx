@@ -58,6 +58,7 @@ interface Job {
   deep_vet_opportunities: string | null
   ai_estimated_effort: string | null
   verdict_override: string | null
+  saved_search_id: string | null
   final_claude_prompt: string | null
   final_loom_script: string | null
   final_proposal_text: string | null
@@ -197,6 +198,7 @@ export default function PipelinePage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [savedSearches, setSavedSearches] = useState<{ id: string; name: string }[]>([])
 
   // Panel form state
   const [panelLoomLink, setPanelLoomLink] = useState('')
@@ -233,6 +235,10 @@ export default function PipelinePage() {
 
   useEffect(() => {
     fetchJobs()
+    fetch('/api/saved-searches')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setSavedSearches(data))
+      .catch(() => {})
   }, [fetchJobs])
 
   // -------------------------------------------------------------------------
@@ -511,6 +517,7 @@ export default function PipelinePage() {
                     <KanbanCard
                       key={job.id}
                       job={job}
+                      searchName={savedSearches.find(s => s.id === job.saved_search_id)?.name ?? null}
                       onClick={() => openPanel(job)}
                     />
                   ))}
@@ -535,6 +542,7 @@ export default function PipelinePage() {
           {/* Panel */}
           <SlideOverPanel
             job={selectedJob}
+            searchName={savedSearches.find(s => s.id === selectedJob.saved_search_id)?.name ?? null}
             history={history}
             historyLoading={historyLoading}
             panelLoomLink={panelLoomLink}
@@ -593,7 +601,7 @@ export default function PipelinePage() {
 // KanbanCard Component
 // ---------------------------------------------------------------------------
 
-function KanbanCard({ job, onClick }: { job: Job; onClick: () => void }) {
+function KanbanCard({ job, searchName, onClick }: { job: Job; searchName: string | null; onClick: () => void }) {
   const score = job.deep_vet_score ?? job.ai_score
   const originalVerdict = job.deep_vet_verdict ?? job.ai_verdict
   const effectiveVerdict = job.verdict_override ?? originalVerdict
@@ -607,10 +615,12 @@ function KanbanCard({ job, onClick }: { job: Job; onClick: () => void }) {
       {/* Title */}
       <p className="text-sm font-medium text-white truncate">{job.title}</p>
 
-      {/* Budget */}
-      {job.budget_display && (
-        <p className="mt-1 text-xs text-zinc-400 truncate">{job.budget_display}</p>
-      )}
+      {/* Saved search + Budget */}
+      <div className="mt-1 flex items-center gap-2 text-xs truncate">
+        {searchName && <span className="text-blue-400">{searchName}</span>}
+        {searchName && job.budget_display && <span className="text-zinc-700">·</span>}
+        {job.budget_display && <span className="text-zinc-400">{job.budget_display}</span>}
+      </div>
 
       {/* Client info row */}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-zinc-500">
@@ -712,6 +722,7 @@ function KanbanCard({ job, onClick }: { job: Job; onClick: () => void }) {
 
 interface SlideOverPanelProps {
   job: Job
+  searchName: string | null
   history: HistoryEntry[]
   historyLoading: boolean
   panelLoomLink: string
@@ -742,6 +753,7 @@ interface SlideOverPanelProps {
 
 function SlideOverPanel({
   job,
+  searchName,
   history,
   historyLoading,
   panelLoomLink,
@@ -788,19 +800,24 @@ function SlideOverPanel({
           <h2 className="text-lg font-semibold text-white leading-tight">
             {job.title}
           </h2>
-          {job.upwork_link && (
-            <a
-              href={job.upwork_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition"
-            >
-              Open on Upwork
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
-            </a>
-          )}
+          <div className="mt-1 flex items-center gap-3">
+            {searchName && (
+              <span className="text-xs text-blue-400">{searchName}</span>
+            )}
+            {job.upwork_link && (
+              <a
+                href={job.upwork_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-300 transition"
+              >
+                Upwork
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+              </a>
+            )}
+          </div>
         </div>
         <button
           onClick={onClose}
