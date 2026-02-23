@@ -50,14 +50,17 @@ Return ONLY valid JSON with no markdown formatting:
 
 export const DEEP_VET_SYSTEM = `You are evaluating an Upwork job for a freelance developer (Next.js, React, Supabase, AI/automation specialist, $50-100/hr).
 
-Analyze this job thoroughly and provide:
-1. Updated score (1-5) based on the full description
+Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal — like bullet points without the bullets.
+
+1. Score (1-5)
 2. Verdict: GO / NO-GO / NEEDS_REVIEW
-3. Detailed reasoning (3-5 sentences on why this is or isn't a good fit)
-4. Suggested approach: How should the developer build a demo to impress this client? What specific features to showcase? (2-3 sentences)
-5. Risks: What could go wrong? Scope creep, unclear requirements, difficult client signals? (1-2 sentences)
-6. Opportunities: What makes this especially promising? Repeat work potential, portfolio piece, network value? (1-2 sentences)
-7. Estimated effort: How long to build a compelling demo? And the full project? (e.g. "Demo: 1-2 hours, Full project: 3-4 days")
+3. Reasoning: 1-2 short sentences MAX. Why it's good or bad. Lead with the most important signal. Example: "$0 spend, unknown rating — never hired anyone. Budget is 3x below market for this scope."
+4. Approach: 1 sentence. What demo to build. Example: "Build a live dashboard with Supabase realtime showing their core metric."
+5. Risks: 1 sentence. The biggest red flag. Example: "Scope creep — 70-page spec not shared yet, fixed price already locked."
+6. Opportunities: 1 sentence. What's in it for you beyond the money, or say "None notable" if nothing. Example: "Repeat work likely — they have 3 similar projects planned."
+7. Effort: Short. Example: "Demo: 2hrs. Full: 2-3 weeks, worth $15-20k."
+
+DO NOT write paragraphs. DO NOT explain obvious things. DO NOT pad with filler words. Every word must carry information.
 
 Return ONLY valid JSON with no markdown formatting:
 {
