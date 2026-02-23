@@ -45,8 +45,12 @@ interface DailyRunJob {
   claude_code_prompt: string | null
   loom_script: string | null
   proposal_text: string | null
+  final_claude_prompt: string | null
+  final_loom_script: string | null
+  final_proposal_text: string | null
   demo_token: string | null
   demo_password: string | null
+  loom_duration: string | null
 }
 
 interface ParseResponse {
@@ -98,6 +102,15 @@ function verdictLabel(verdict: string): string {
   return 'No-Go'
 }
 
+function formatPostedAt(dateStr: string | null): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
 function verdictBadgeBg(verdict: string): string {
   if (verdict === 'GO') return 'bg-emerald-500/10'
   if (verdict === 'NEEDS_REVIEW') return 'bg-amber-500/10'
@@ -123,6 +136,12 @@ export default function DailyRunPage() {
   const [deepVetLoading, setDeepVetLoading] = useState(false)
   const [generatedContent, setGeneratedContent] = useState<Record<string, GeneratedContent>>({})
   const [generatingJobs, setGeneratingJobs] = useState<Record<string, boolean>>({})
+
+  // Editable generated content (user can edit after generation)
+  const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
+  const [editedScripts, setEditedScripts] = useState<Record<string, string>>({})
+  const [editedProposals, setEditedProposals] = useState<Record<string, string>>({})
+  const [savingContent, setSavingContent] = useState<Record<string, boolean>>({})
 
   // Per-job input state (local edits before save, persisted to localStorage)
   const [upworkLinks, setUpworkLinks] = useState<Record<string, string>>(() => {
@@ -446,6 +465,10 @@ export default function DailyRunPage() {
         }
 
         setGeneratedContent((prev) => ({ ...prev, [job.id]: content }))
+        // Initialize editable fields with generated content
+        if (content.prompt) setEditedPrompts((prev) => ({ ...prev, [job.id]: content.prompt! }))
+        if (content.script) setEditedScripts((prev) => ({ ...prev, [job.id]: content.script! }))
+        if (content.proposal) setEditedProposals((prev) => ({ ...prev, [job.id]: content.proposal! }))
         setJobStatuses((prev) => ({ ...prev, [job.id]: 'went-go' }))
         toast(
           buildType === 'build'
@@ -534,6 +557,36 @@ export default function DailyRunPage() {
       }
     },
     [jobs, toast]
+  )
+
+  // ── Save edited content ────────────────────────────────────
+
+  const handleSaveContent = useCallback(
+    async (jobId: string) => {
+      setSavingContent((prev) => ({ ...prev, [jobId]: true }))
+      try {
+        const updates: Record<string, string | null> = {}
+        if (editedPrompts[jobId] !== undefined) updates.final_claude_prompt = editedPrompts[jobId]
+        if (editedScripts[jobId] !== undefined) updates.final_loom_script = editedScripts[jobId]
+        if (editedProposals[jobId] !== undefined) updates.final_proposal_text = editedProposals[jobId]
+
+        const res = await fetch(`/api/jobs/${jobId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+        if (res.ok) {
+          toast('Changes saved', 'success')
+        } else {
+          toast('Failed to save', 'error')
+        }
+      } catch {
+        toast('Failed to save', 'error')
+      } finally {
+        setSavingContent((prev) => ({ ...prev, [jobId]: false }))
+      }
+    },
+    [editedPrompts, editedScripts, editedProposals, toast]
   )
 
   // ── Derived state ───────────────────────────────────────────
@@ -883,7 +936,7 @@ export default function DailyRunPage() {
                         <span>{job.proposals_count} proposals</span>
                       )}
                       {job.posted_at && (
-                        <span>Posted: {job.posted_at}</span>
+                        <span>Posted: {formatPostedAt(job.posted_at)}</span>
                       )}
                     </div>
 

@@ -5,6 +5,54 @@ import { BULK_PARSE_SYSTEM } from '@/lib/ai/prompts'
 import { bulkParseInputSchema, parseResultSchema, parsedJobSchema } from '@/lib/schemas'
 import { generateDedupHash } from '@/lib/dedup'
 
+function resolveRelativeTime(relativeStr: string | null | undefined): string | null {
+  if (!relativeStr) return null
+  const s = relativeStr.trim().toLowerCase()
+  const now = new Date()
+
+  // "just now" / "just posted"
+  if (s.includes('just')) return now.toISOString()
+
+  // "X minutes/hours/days/weeks/months ago"
+  const agoMatch = s.match(/(\d+)\s*(second|minute|hour|day|week|month)s?\s*ago/)
+  if (agoMatch) {
+    const amount = parseInt(agoMatch[1], 10)
+    const unit = agoMatch[2]
+    const ms = {
+      second: 1000,
+      minute: 60 * 1000,
+      hour: 60 * 60 * 1000,
+      day: 24 * 60 * 60 * 1000,
+      week: 7 * 24 * 60 * 60 * 1000,
+      month: 30 * 24 * 60 * 60 * 1000,
+    }[unit]
+    if (ms) return new Date(now.getTime() - amount * ms).toISOString()
+  }
+
+  // "yesterday"
+  if (s === 'yesterday') {
+    return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+  }
+
+  // "an hour ago" / "a minute ago" / "a day ago"
+  const singleMatch = s.match(/^an?\s+(second|minute|hour|day|week|month)\s+ago$/)
+  if (singleMatch) {
+    const unit = singleMatch[1]
+    const ms = {
+      second: 1000,
+      minute: 60 * 1000,
+      hour: 60 * 60 * 1000,
+      day: 24 * 60 * 60 * 1000,
+      week: 7 * 24 * 60 * 60 * 1000,
+      month: 30 * 24 * 60 * 60 * 1000,
+    }[unit]
+    if (ms) return new Date(now.getTime() - ms).toISOString()
+  }
+
+  // Fallback: return the original string if we can't parse it
+  return relativeStr
+}
+
 export async function POST(request: NextRequest) {
   const supabase = createServerClient()
   const body = await request.json()
@@ -96,7 +144,7 @@ export async function POST(request: NextRequest) {
         client_rating: job.client_rating,
         proposals_count: job.proposals_count,
         skills: job.skills,
-        posted_at: job.posted_at,
+        posted_at: resolveRelativeTime(job.posted_at),
         ai_score: job.ai_score,
         ai_verdict: job.ai_verdict,
         ai_reasoning: job.ai_reasoning,
