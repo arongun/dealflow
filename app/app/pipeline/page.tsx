@@ -553,6 +553,9 @@ export default function PipelinePage() {
 
 function KanbanCard({ job, onClick }: { job: Job; onClick: () => void }) {
   const score = job.deep_vet_score ?? job.ai_score
+  const originalVerdict = job.deep_vet_verdict ?? job.ai_verdict
+  const effectiveVerdict = job.verdict_override ?? originalVerdict
+  const hasOverride = job.verdict_override != null && job.verdict_override !== originalVerdict
 
   return (
     <button
@@ -575,6 +578,23 @@ function KanbanCard({ job, onClick }: { job: Job; onClick: () => void }) {
             className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${getScoreColor(score)}`}
           >
             {score.toFixed(1)}
+          </span>
+        )}
+
+        {/* Verdict badge with override */}
+        {effectiveVerdict && (
+          <span
+            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium ${getVerdictColor(effectiveVerdict)}`}
+          >
+            {hasOverride ? (
+              <>
+                <span className="opacity-50 line-through">{originalVerdict === 'GO' ? 'Go' : originalVerdict === 'NEEDS_REVIEW' ? 'Review' : 'No-Go'}</span>
+                <span className="text-zinc-500">→</span>
+                <span>{effectiveVerdict === 'GO' ? 'Go' : effectiveVerdict === 'NEEDS_REVIEW' ? 'Review' : 'No-Go'}</span>
+              </>
+            ) : (
+              <>{effectiveVerdict === 'GO' ? 'Go' : effectiveVerdict === 'NEEDS_REVIEW' ? 'Review' : 'No-Go'}</>
+            )}
           </span>
         )}
 
@@ -639,8 +659,11 @@ function SlideOverPanel({
   onSaveAll,
 }: SlideOverPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const [showVerdictMenu, setShowVerdictMenu] = useState(false)
   const score = job.deep_vet_score ?? job.ai_score
-  const verdict = job.deep_vet_verdict ?? job.ai_verdict
+  const originalVerdict = job.deep_vet_verdict ?? job.ai_verdict
+  const effectiveVerdict = job.verdict_override ?? originalVerdict
+  const hasOverride = job.verdict_override != null && job.verdict_override !== originalVerdict
   const reasoning = job.deep_vet_reasoning ?? job.ai_reasoning
 
   return (
@@ -728,14 +751,61 @@ function SlideOverPanel({
                     </span>
                   </div>
                 )}
-                {verdict && (
-                  <div className="flex items-center gap-2">
+                {originalVerdict && (
+                  <div className="relative flex items-center gap-2">
                     <span className="text-xs text-zinc-500">Verdict:</span>
-                    <span
-                      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${getVerdictColor(verdict)}`}
+                    <button
+                      onClick={() => setShowVerdictMenu(!showVerdictMenu)}
+                      className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-medium transition hover:ring-1 hover:ring-zinc-600 ${getVerdictColor(effectiveVerdict)}`}
                     >
-                      {verdict}
-                    </span>
+                      {hasOverride ? (
+                        <>
+                          <span className="opacity-50 line-through">{originalVerdict}</span>
+                          <span className="text-zinc-500">→</span>
+                          <span>{effectiveVerdict}</span>
+                        </>
+                      ) : (
+                        effectiveVerdict
+                      )}
+                    </button>
+                    {showVerdictMenu && (
+                      <div className="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-zinc-700 bg-zinc-800 py-1 shadow-xl">
+                        {(['GO', 'NEEDS_REVIEW', 'NO-GO'] as const).map((v) => (
+                          <button
+                            key={v}
+                            onClick={() => {
+                              onPatchField(job.id, 'verdict_override', v)
+                              setShowVerdictMenu(false)
+                            }}
+                            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition hover:bg-zinc-700 ${
+                              effectiveVerdict === v ? 'bg-zinc-700/50' : ''
+                            }`}
+                          >
+                            <span className={`inline-block h-2 w-2 rounded-full ${
+                              v === 'GO' ? 'bg-emerald-400' : v === 'NEEDS_REVIEW' ? 'bg-amber-400' : 'bg-red-400'
+                            }`} />
+                            <span className={getVerdictColor(v).split(' ')[0]}>
+                              {v === 'GO' ? 'Go' : v === 'NEEDS_REVIEW' ? 'Review' : 'No-Go'}
+                            </span>
+                            {effectiveVerdict === v && <span className="ml-auto text-zinc-500">✓</span>}
+                          </button>
+                        ))}
+                        {hasOverride && (
+                          <>
+                            <div className="my-1 border-t border-zinc-700" />
+                            <button
+                              onClick={() => {
+                                onPatchField(job.id, 'verdict_override', originalVerdict ?? '')
+                                setShowVerdictMenu(false)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-400 transition hover:bg-zinc-700"
+                            >
+                              Reset to AI verdict
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 {job.ai_estimated_effort && (
