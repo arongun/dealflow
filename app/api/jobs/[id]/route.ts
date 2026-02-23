@@ -47,7 +47,7 @@ export async function PATCH(
   // Get current job for history tracking
   const { data: currentJob } = await supabase
     .from('jobs')
-    .select('pipeline_stage')
+    .select('pipeline_stage, ai_verdict, verdict_override')
     .eq('id', id)
     .single()
 
@@ -70,6 +70,18 @@ export async function PATCH(
       old_value: currentJob?.pipeline_stage,
       new_value: parsed.data.pipeline_stage,
       details: `Pipeline stage changed from ${currentJob?.pipeline_stage} to ${parsed.data.pipeline_stage}`,
+    })
+  }
+
+  // Log verdict override changes
+  if (parsed.data.verdict_override !== undefined && parsed.data.verdict_override !== currentJob?.verdict_override) {
+    const oldVerdict = currentJob?.verdict_override ?? currentJob?.ai_verdict ?? 'unknown'
+    await supabase.from('job_history').insert({
+      job_id: id,
+      action: 'verdict_override',
+      old_value: oldVerdict,
+      new_value: parsed.data.verdict_override,
+      details: `Verdict manually overridden from ${oldVerdict} to ${parsed.data.verdict_override}`,
     })
   }
 

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const { count } = await supabase
       .from('jobs')
       .select('*', { count: 'exact', head: true })
-      .in('pipeline_stage', ['go', 'building', 'ready'])
+      .in('pipeline_stage', ['new', 'go', 'building', 'ready'])
 
     return NextResponse.json({ active_count: count ?? 0 })
   }

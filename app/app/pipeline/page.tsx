@@ -9,6 +9,7 @@ import { CopyButton } from '../components/copy-button'
 // ---------------------------------------------------------------------------
 
 type PipelineStage =
+  | 'new'
   | 'go'
   | 'building'
   | 'ready'
@@ -17,6 +18,7 @@ type PipelineStage =
   | 'won'
   | 'lost'
   | 'rejected'
+  | 'waiting'
 
 interface Job {
   id: string
@@ -55,6 +57,7 @@ interface Job {
   deep_vet_risks: string | null
   deep_vet_opportunities: string | null
   ai_estimated_effort: string | null
+  verdict_override: string | null
   created_at: string
   updated_at: string
   stage_changed_at: string | null
@@ -75,6 +78,7 @@ interface HistoryEntry {
 // ---------------------------------------------------------------------------
 
 const COLUMNS: { stage: PipelineStage; label: string; description: string }[] = [
+  { stage: 'new', label: 'New', description: 'Freshly parsed, awaiting review' },
   { stage: 'go', label: 'Go', description: 'Approved, awaiting build' },
   { stage: 'building', label: 'Building', description: 'Demo being built' },
   { stage: 'ready', label: 'Ready', description: 'Demo built, awaiting Loom' },
@@ -82,10 +86,12 @@ const COLUMNS: { stage: PipelineStage; label: string; description: string }[] = 
   { stage: 'replied', label: 'Replied', description: 'Client responded' },
   { stage: 'won', label: 'Closed Won', description: '' },
   { stage: 'lost', label: 'Closed Lost', description: '' },
+  { stage: 'waiting', label: 'Waiting', description: 'On hold' },
   { stage: 'rejected', label: 'Rejected', description: '' },
 ]
 
 const ALL_STAGES: { value: PipelineStage; label: string }[] = [
+  { value: 'new', label: 'New' },
   { value: 'go', label: 'Go' },
   { value: 'building', label: 'Building' },
   { value: 'ready', label: 'Ready' },
@@ -93,6 +99,7 @@ const ALL_STAGES: { value: PipelineStage; label: string }[] = [
   { value: 'replied', label: 'Replied' },
   { value: 'won', label: 'Closed Won' },
   { value: 'lost', label: 'Closed Lost' },
+  { value: 'waiting', label: 'Waiting' },
   { value: 'rejected', label: 'Rejected' },
 ]
 
@@ -145,6 +152,8 @@ function getVerdictColor(verdict: string | null | undefined): string {
 
 function getColumnHeaderColor(stage: PipelineStage): string {
   switch (stage) {
+    case 'new':
+      return 'text-white'
     case 'go':
       return 'text-emerald-400'
     case 'building':
@@ -159,6 +168,8 @@ function getColumnHeaderColor(stage: PipelineStage): string {
       return 'text-emerald-400'
     case 'lost':
       return 'text-red-400'
+    case 'waiting':
+      return 'text-zinc-400'
     case 'rejected':
       return 'text-zinc-500'
     default:

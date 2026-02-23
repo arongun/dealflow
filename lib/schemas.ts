@@ -63,6 +63,7 @@ export const jobUpdateSchema = z.object({
   demo_password: z.string().optional(),
   loom_link: z.string().optional(),
   notes: z.string().optional(),
+  verdict_override: z.enum(['GO', 'NO-GO', 'NEEDS_REVIEW']).nullable().optional(),
   rejection_reason: z.string().optional(),
   client_reply: z.string().optional(),
   claude_code_prompt: z.string().optional(),

@@ -57,6 +57,7 @@ export interface Job {
   loom_link: string | null
   proposal_text: string | null
   pipeline_stage: PipelineStage
+  verdict_override: string | null
   rejection_reason: string | null
   client_reply: string | null
   client_reply_draft: string | null
