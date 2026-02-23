@@ -1140,46 +1140,48 @@ export default function DailyRunPage() {
                           >
                             Wait
                           </button>
-                          {skipInputOpen[job.id] ? (
-                            <>
-                              <input
-                                type="text"
-                                autoFocus
-                                value={skipNotes[job.id] || ''}
-                                onChange={(e) =>
-                                  setSkipNotes((prev) => ({
+                          <div className="ml-auto flex items-center gap-2">
+                            {skipInputOpen[job.id] ? (
+                              <>
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={skipNotes[job.id] || ''}
+                                  onChange={(e) =>
+                                    setSkipNotes((prev) => ({
+                                      ...prev,
+                                      [job.id]: e.target.value,
+                                    }))
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSkipConfirm(job.id)
+                                    if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
+                                  }}
+                                  placeholder="Note (optional)"
+                                  className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
+                                  style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
+                                />
+                                <button
+                                  onClick={() => handleSkipConfirm(job.id)}
+                                  className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                                >
+                                  Skip
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  setSkipInputOpen((prev) => ({
                                     ...prev,
-                                    [job.id]: e.target.value,
+                                    [job.id]: true,
                                   }))
                                 }
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleSkipConfirm(job.id)
-                                  if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
-                                }}
-                                placeholder="Note (optional)"
-                                className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
-                                style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
-                              />
-                              <button
-                                onClick={() => handleSkipConfirm(job.id)}
-                                className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                                className="text-sm text-zinc-500 transition hover:text-zinc-300"
                               >
                                 Skip
                               </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() =>
-                                setSkipInputOpen((prev) => ({
-                                  ...prev,
-                                  [job.id]: true,
-                                }))
-                              }
-                              className="text-sm text-zinc-500 transition hover:text-zinc-300"
-                            >
-                              Skip
-                            </button>
-                          )}
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -1189,46 +1191,48 @@ export default function DailyRunPage() {
                       status === 'active' && (
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <span className="text-xs text-zinc-500 italic">No deep vet data</span>
-                          {skipInputOpen[job.id] ? (
-                            <>
-                              <input
-                                type="text"
-                                autoFocus
-                                value={skipNotes[job.id] || ''}
-                                onChange={(e) =>
-                                  setSkipNotes((prev) => ({
+                          <div className="ml-auto flex items-center gap-2">
+                            {skipInputOpen[job.id] ? (
+                              <>
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={skipNotes[job.id] || ''}
+                                  onChange={(e) =>
+                                    setSkipNotes((prev) => ({
+                                      ...prev,
+                                      [job.id]: e.target.value,
+                                    }))
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSkipConfirm(job.id)
+                                    if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
+                                  }}
+                                  placeholder="Note (optional)"
+                                  className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
+                                  style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
+                                />
+                                <button
+                                  onClick={() => handleSkipConfirm(job.id)}
+                                  className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                                >
+                                  Skip
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() =>
+                                  setSkipInputOpen((prev) => ({
                                     ...prev,
-                                    [job.id]: e.target.value,
+                                    [job.id]: true,
                                   }))
                                 }
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleSkipConfirm(job.id)
-                                  if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
-                                }}
-                                placeholder="Note (optional)"
-                                className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
-                                style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
-                              />
-                              <button
-                                onClick={() => handleSkipConfirm(job.id)}
-                                className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                                className="text-sm text-zinc-500 transition hover:text-zinc-300"
                               >
                                 Skip
                               </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() =>
-                                setSkipInputOpen((prev) => ({
-                                  ...prev,
-                                  [job.id]: true,
-                                }))
-                              }
-                              className="text-sm text-zinc-500 transition hover:text-zinc-300"
-                            >
-                              Skip
-                            </button>
-                          )}
+                            )}
+                          </div>
                         </div>
                       )}
 
