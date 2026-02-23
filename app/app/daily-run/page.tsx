@@ -131,11 +131,9 @@ export default function DailyRunPage() {
   // Per-job status state
   const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatus>>({})
 
-  // Notes modal state (for skip)
-  const [noteModal, setNoteModal] = useState<{
-    jobId: string
-    notes: string
-  } | null>(null)
+  // Inline skip input state (per-job)
+  const [skipInputOpen, setSkipInputOpen] = useState<Record<string, boolean>>({})
+  const [skipNotes, setSkipNotes] = useState<Record<string, string>>({})
 
   // Verdict override dropdown
   const [showVerdictDropdown, setShowVerdictDropdown] = useState<string | null>(null)
@@ -269,49 +267,18 @@ export default function DailyRunPage() {
   // ── Phase 2: Deep Vet ───────────────────────────────────────
 
   const handleDeepVet = useCallback(async () => {
-    // Only deep vet jobs that have content AND are active
+    // Only deep vet jobs that have BOTH upwork link AND full description filled
     const jobsToVet = jobs.filter(
       (j) =>
+        upworkLinks[j.id]?.trim() &&
         fullDescriptions[j.id]?.trim() &&
         jobStatuses[j.id] !== 'skipped' &&
         jobStatuses[j.id] !== 'went-go' &&
         jobStatuses[j.id] !== 'waiting'
     )
 
-    // Auto-skip jobs without content
-    const jobsWithoutContent = jobs.filter(
-      (j) =>
-        !fullDescriptions[j.id]?.trim() &&
-        jobStatuses[j.id] === 'active'
-    )
-
-    if (jobsWithoutContent.length > 0) {
-      // Mark them as skipped with a note
-      for (const j of jobsWithoutContent) {
-        try {
-          await fetch(`/api/jobs/${j.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              pipeline_stage: 'rejected',
-              rejection_reason: 'Auto-skipped: no full description provided',
-              notes: 'Auto-skipped during deep analysis — missing full job description',
-            }),
-          })
-        } catch { /* silent */ }
-      }
-      setJobStatuses((prev) => {
-        const next = { ...prev }
-        jobsWithoutContent.forEach((j) => {
-          next[j.id] = 'skipped'
-        })
-        return next
-      })
-      toast(`${jobsWithoutContent.length} job(s) auto-skipped (no description)`, 'info')
-    }
-
     if (jobsToVet.length === 0) {
-      toast('Fill in at least one full job description', 'error')
+      toast('Fill in the Upwork link and full description for at least one job', 'error')
       return
     }
 
@@ -469,7 +436,8 @@ export default function DailyRunPage() {
   )
 
   const handleSkipConfirm = useCallback(
-    async (jobId: string, notes: string) => {
+    async (jobId: string) => {
+      const notes = skipNotes[jobId] || ''
       try {
         await fetch(`/api/jobs/${jobId}`, {
           method: 'PATCH',
@@ -481,13 +449,14 @@ export default function DailyRunPage() {
           }),
         })
         setJobStatuses((prev) => ({ ...prev, [jobId]: 'skipped' }))
-        setNoteModal(null)
+        setSkipInputOpen((prev) => ({ ...prev, [jobId]: false }))
+        setSkipNotes((prev) => ({ ...prev, [jobId]: '' }))
         toast('Job skipped', 'info')
       } catch {
         toast('Failed to skip job', 'error')
       }
     },
-    [toast]
+    [skipNotes, toast]
   )
 
   const handleWait = useCallback(
@@ -543,6 +512,7 @@ export default function DailyRunPage() {
 
   const deepVetReady = jobs.some(
     (j) =>
+      upworkLinks[j.id]?.trim() &&
       fullDescriptions[j.id]?.trim() &&
       jobStatuses[j.id] !== 'skipped'
   )
@@ -564,7 +534,8 @@ export default function DailyRunPage() {
     setUpworkLinks({})
     setFullDescriptions({})
     setJobStatuses({})
-    setNoteModal(null)
+    setSkipInputOpen({})
+    setSkipNotes({})
     setShowVerdictDropdown(null)
   }, [])
 
@@ -580,7 +551,7 @@ export default function DailyRunPage() {
   // ── Render ──────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-zinc-950 mx-auto max-w-4xl px-6">
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
@@ -717,7 +688,7 @@ export default function DailyRunPage() {
                   Deep Vet — Fill in details for the jobs you want to analyze further
                 </h2>
                 <p className="mt-0.5 text-xs text-zinc-500">
-                  Paste the full Upwork job description and link for each job, then run deep analysis. Jobs without content will be auto-skipped.
+                  Paste the Upwork link and full job description for each job you want to analyze. Jobs without both fields filled will be left as-is — skip them manually if needed.
                 </p>
               </div>
               <button
@@ -941,15 +912,47 @@ export default function DailyRunPage() {
                             className="min-h-[120px] w-full resize-y rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
                           />
                         </div>
-                        <div className="flex justify-end">
-                          <button
-                            onClick={() =>
-                              setNoteModal({ jobId: job.id, notes: '' })
-                            }
-                            className="text-sm text-zinc-500 transition hover:text-zinc-300"
-                          >
-                            Skip
-                          </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {skipInputOpen[job.id] ? (
+                            <>
+                              <input
+                                type="text"
+                                autoFocus
+                                value={skipNotes[job.id] || ''}
+                                onChange={(e) =>
+                                  setSkipNotes((prev) => ({
+                                    ...prev,
+                                    [job.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSkipConfirm(job.id)
+                                  if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
+                                }}
+                                placeholder="Note (optional)"
+                                className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
+                                style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
+                              />
+                              <button
+                                onClick={() => handleSkipConfirm(job.id)}
+                                className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                              >
+                                Skip
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setSkipInputOpen((prev) => ({
+                                  ...prev,
+                                  [job.id]: true,
+                                }))
+                              }
+                              className="text-sm text-zinc-500 transition hover:text-zinc-300"
+                            >
+                              Skip
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -987,14 +990,46 @@ export default function DailyRunPage() {
                           >
                             Wait
                           </button>
-                          <button
-                            onClick={() =>
-                              setNoteModal({ jobId: job.id, notes: '' })
-                            }
-                            className="text-sm text-zinc-500 transition hover:text-zinc-300"
-                          >
-                            Skip
-                          </button>
+                          {skipInputOpen[job.id] ? (
+                            <>
+                              <input
+                                type="text"
+                                autoFocus
+                                value={skipNotes[job.id] || ''}
+                                onChange={(e) =>
+                                  setSkipNotes((prev) => ({
+                                    ...prev,
+                                    [job.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSkipConfirm(job.id)
+                                  if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
+                                }}
+                                placeholder="Note (optional)"
+                                className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
+                                style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
+                              />
+                              <button
+                                onClick={() => handleSkipConfirm(job.id)}
+                                className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                              >
+                                Skip
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setSkipInputOpen((prev) => ({
+                                  ...prev,
+                                  [job.id]: true,
+                                }))
+                              }
+                              className="text-sm text-zinc-500 transition hover:text-zinc-300"
+                            >
+                              Skip
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -1004,14 +1039,46 @@ export default function DailyRunPage() {
                       status === 'active' && (
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <span className="text-xs text-zinc-500 italic">No deep vet data</span>
-                          <button
-                            onClick={() =>
-                              setNoteModal({ jobId: job.id, notes: '' })
-                            }
-                            className="text-sm text-zinc-500 transition hover:text-zinc-300"
-                          >
-                            Skip
-                          </button>
+                          {skipInputOpen[job.id] ? (
+                            <>
+                              <input
+                                type="text"
+                                autoFocus
+                                value={skipNotes[job.id] || ''}
+                                onChange={(e) =>
+                                  setSkipNotes((prev) => ({
+                                    ...prev,
+                                    [job.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSkipConfirm(job.id)
+                                  if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
+                                }}
+                                placeholder="Note (optional)"
+                                className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
+                                style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
+                              />
+                              <button
+                                onClick={() => handleSkipConfirm(job.id)}
+                                className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                              >
+                                Skip
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                setSkipInputOpen((prev) => ({
+                                  ...prev,
+                                  [job.id]: true,
+                                }))
+                              }
+                              className="text-sm text-zinc-500 transition hover:text-zinc-300"
+                            >
+                              Skip
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -1100,49 +1167,6 @@ export default function DailyRunPage() {
         </div>
       )}
 
-      {/* ─── Notes Modal (for skip & reject) ─────────────────── */}
-
-      {noteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
-            <h3 className="text-base font-medium text-white">Skip Job</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Add an optional note — this helps improve future AI scoring over time.
-            </p>
-            <textarea
-              autoFocus
-              value={noteModal.notes}
-              onChange={(e) =>
-                setNoteModal({ ...noteModal, notes: e.target.value })
-              }
-              placeholder="e.g. Budget too low, scope too vague, not in our niche..."
-              className="mt-4 min-h-[100px] w-full resize-y rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  handleSkipConfirm(noteModal.jobId, noteModal.notes)
-                }
-              }}
-            />
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-zinc-500">⌘+Enter to confirm</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setNoteModal(null)}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleSkipConfirm(noteModal.jobId, noteModal.notes)}
-                  className="rounded-lg bg-zinc-700 px-3 py-2 text-sm font-medium text-zinc-300 transition hover:bg-zinc-600"
-                >
-                  Skip
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
