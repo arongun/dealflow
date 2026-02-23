@@ -124,9 +124,19 @@ export default function DailyRunPage() {
   const [generatedContent, setGeneratedContent] = useState<Record<string, GeneratedContent>>({})
   const [generatingJobs, setGeneratingJobs] = useState<Record<string, boolean>>({})
 
-  // Per-job input state (local edits before save)
-  const [upworkLinks, setUpworkLinks] = useState<Record<string, string>>({})
-  const [fullDescriptions, setFullDescriptions] = useState<Record<string, string>>({})
+  // Per-job input state (local edits before save, persisted to localStorage)
+  const [upworkLinks, setUpworkLinks] = useState<Record<string, string>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      return JSON.parse(localStorage.getItem('dailyrun_upworkLinks') || '{}')
+    } catch { return {} }
+  })
+  const [fullDescriptions, setFullDescriptions] = useState<Record<string, string>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      return JSON.parse(localStorage.getItem('dailyrun_fullDescriptions') || '{}')
+    } catch { return {} }
+  })
 
   // Per-job status state
   const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatus>>({})
@@ -175,10 +185,18 @@ export default function DailyRunPage() {
           const links: Record<string, string> = {}
           const descs: Record<string, string> = {}
 
+          // Merge DB values with localStorage (localStorage wins for unsaved edits)
+          let savedLinks: Record<string, string> = {}
+          let savedDescs: Record<string, string> = {}
+          try {
+            savedLinks = JSON.parse(localStorage.getItem('dailyrun_upworkLinks') || '{}')
+            savedDescs = JSON.parse(localStorage.getItem('dailyrun_fullDescriptions') || '{}')
+          } catch { /* ignore */ }
+
           sorted.forEach((j) => {
             statuses[j.id] = 'active'
-            if (j.upwork_link) links[j.id] = j.upwork_link
-            if (j.full_description) descs[j.id] = j.full_description
+            links[j.id] = savedLinks[j.id] || j.upwork_link || ''
+            descs[j.id] = savedDescs[j.id] || j.full_description || ''
           })
 
           setJobStatuses(statuses)
@@ -201,6 +219,16 @@ export default function DailyRunPage() {
     }
     loadExistingJobs()
   }, [])
+
+  // ── Persist input fields to localStorage ────────────────────
+
+  useEffect(() => {
+    localStorage.setItem('dailyrun_upworkLinks', JSON.stringify(upworkLinks))
+  }, [upworkLinks])
+
+  useEffect(() => {
+    localStorage.setItem('dailyrun_fullDescriptions', JSON.stringify(fullDescriptions))
+  }, [fullDescriptions])
 
   // ── Phase 1: Parse ──────────────────────────────────────────
 
@@ -537,6 +565,8 @@ export default function DailyRunPage() {
     setSkipInputOpen({})
     setSkipNotes({})
     setShowVerdictDropdown(null)
+    localStorage.removeItem('dailyrun_upworkLinks')
+    localStorage.removeItem('dailyrun_fullDescriptions')
   }, [])
 
   // Don't render until initial load is done (avoids flash of input phase)
@@ -837,6 +867,39 @@ export default function DailyRunPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Job details row */}
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+                      {job.client_location && (
+                        <span>{job.client_location}</span>
+                      )}
+                      {job.client_spend && (
+                        <span>Spent: {job.client_spend}</span>
+                      )}
+                      {job.client_rating != null && (
+                        <span>Rating: {job.client_rating}</span>
+                      )}
+                      {job.proposals_count != null && (
+                        <span>{job.proposals_count} proposals</span>
+                      )}
+                      {job.posted_at && (
+                        <span>Posted: {job.posted_at}</span>
+                      )}
+                    </div>
+
+                    {/* Skills */}
+                    {job.skills && job.skills.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {job.skills.map((skill) => (
+                          <span
+                            key={skill}
+                            className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* AI reasoning */}
                     <p className="mt-3 text-sm text-zinc-400">

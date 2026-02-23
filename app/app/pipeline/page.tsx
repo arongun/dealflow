@@ -572,6 +572,48 @@ function KanbanCard({ job, onClick }: { job: Job; onClick: () => void }) {
         <p className="mt-1 text-xs text-zinc-400 truncate">{job.budget_display}</p>
       )}
 
+      {/* Client info row */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-zinc-500">
+        {job.client_location && <span>{job.client_location}</span>}
+        {job.client_spend && (
+          <>
+            <span className="text-zinc-700">·</span>
+            <span>{job.client_spend}</span>
+          </>
+        )}
+        {job.client_rating && (
+          <>
+            <span className="text-zinc-700">·</span>
+            <span>★ {job.client_rating}</span>
+          </>
+        )}
+        {job.proposals_count && (
+          <>
+            <span className="text-zinc-700">·</span>
+            <span>{job.proposals_count} proposals</span>
+          </>
+        )}
+      </div>
+
+      {/* Skills */}
+      {job.skills && job.skills.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {job.skills.slice(0, 4).map((skill) => (
+            <span
+              key={skill}
+              className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[10px] text-zinc-500"
+            >
+              {skill}
+            </span>
+          ))}
+          {job.skills.length > 4 && (
+            <span className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[10px] text-zinc-600">
+              +{job.skills.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Badges row */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {/* AI Score badge */}
@@ -607,6 +649,13 @@ function KanbanCard({ job, onClick }: { job: Job; onClick: () => void }) {
           </span>
         )}
       </div>
+
+      {/* AI reasoning snippet */}
+      {(job.deep_vet_reasoning || job.ai_reasoning) && (
+        <p className="mt-1.5 text-[11px] text-zinc-600 line-clamp-2 leading-relaxed">
+          {job.deep_vet_reasoning || job.ai_reasoning}
+        </p>
+      )}
 
       {/* Meta row */}
       <div className="mt-2 flex items-center justify-between">
