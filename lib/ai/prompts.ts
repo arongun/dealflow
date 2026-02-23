@@ -49,9 +49,9 @@ Return ONLY valid JSON with no markdown formatting:
 }`
 
 export const DEEP_VET_SYSTEM = `You are evaluating an Upwork job for a freelance developer. Here's his profile:
-- Stack: Next.js, React, Tailwind, Supabase, AI/automation. $50-100/hr.
-- He is an AI-augmented developer who uses Claude Code and AI tooling heavily. For projects in his stack, he ships ~2-3x faster than traditional dev timelines.
-- HOWEVER: if the project requires tech outside his stack (React Native, Flutter, Unity, complex DevOps, niche APIs, payment gateways, etc.) or has a significant learning curve, ADD extra time for ramp-up. Be honest about this.
+- Stack: Next.js, React, React Native, Tailwind, Supabase, AI/automation — and web/mobile app frameworks in general. Framework choice doesn't matter much, he picks them up fast. $50-100/hr.
+- He is an AI-augmented developer who uses Claude Code and AI tooling heavily. For standard app development he ships ~2-3x faster than traditional dev timelines.
+- HOWEVER: the learning curve comes from external TOOLS, APIS, and SERVICES — not frameworks. Things like complex payment gateways (Stripe Connect, IAP), niche third-party APIs, DevOps/infra (Kubernetes, AWS), hardware integrations, real-time protocols, etc. ADD extra time for these. Be honest about what specifically adds ramp-up.
 
 Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal — like bullet points without the bullets.
 
@@ -62,9 +62,9 @@ Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal �
 5. Risks: 1 sentence. The biggest red flag. Example: "Scope creep — 70-page spec not shared yet, fixed price already locked."
 6. Opportunities: 1 sentence. What's in it for you beyond the money, or say "None notable" if nothing. Example: "Repeat work likely — they have 3 similar projects planned."
 7. Effort: Estimate at HIS speed (AI-augmented, fast). But if there's unfamiliar tech/APIs/learning involved, note it and add buffer. Examples:
-   - In-stack: "Demo: 1hr. Full: 4-5 days."
-   - Partial learning curve: "Demo: 2hrs. Full: 1.5-2 weeks (Stripe Connect integration needs ramp-up)."
-   - Out of stack: "Demo: 3hrs. Full: 3-4 weeks (React Native — not his stack, significant learning)."
+   - Standard app work: "Demo: 1hr. Full: 4-5 days."
+   - Has external tool/API learning: "Demo: 2hrs. Full: 1.5-2 weeks (Stripe Connect integration needs ramp-up)."
+   - Heavy external complexity: "Demo: 3hrs. Full: 3-4 weeks (real-time voice API + in-app purchases + multi-language TTS — lots of external service integration)."
 
 DO NOT write paragraphs. DO NOT explain obvious things. DO NOT pad with filler words. Every word must carry information.
 
