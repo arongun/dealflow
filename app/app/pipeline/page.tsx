@@ -58,6 +58,10 @@ interface Job {
   deep_vet_opportunities: string | null
   ai_estimated_effort: string | null
   verdict_override: string | null
+  final_claude_prompt: string | null
+  final_loom_script: string | null
+  final_proposal_text: string | null
+  loom_duration: string | null
   created_at: string
   updated_at: string
   stage_changed_at: string | null
@@ -196,9 +200,14 @@ export default function PipelinePage() {
 
   // Panel form state
   const [panelLoomLink, setPanelLoomLink] = useState('')
+  const [panelLoomDuration, setPanelLoomDuration] = useState('')
   const [panelDemoUrl, setPanelDemoUrl] = useState('')
   const [panelNotes, setPanelNotes] = useState('')
   const [panelStage, setPanelStage] = useState<PipelineStage | string>('')
+  const [panelPrompt, setPanelPrompt] = useState('')
+  const [panelScript, setPanelScript] = useState('')
+  const [panelProposal, setPanelProposal] = useState('')
+  const [showOriginal, setShowOriginal] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   // Track which fields have been changed to show save indicator
@@ -254,9 +263,14 @@ export default function PipelinePage() {
   const openPanel = useCallback(async (job: Job) => {
     setSelectedJob(job)
     setPanelLoomLink(job.loom_link || '')
+    setPanelLoomDuration(job.loom_duration || '')
     setPanelDemoUrl(job.demo_url || '')
     setPanelNotes(job.notes || '')
     setPanelStage(job.pipeline_stage)
+    setPanelPrompt(job.final_claude_prompt || job.claude_code_prompt || '')
+    setPanelScript(job.final_loom_script || job.loom_script || '')
+    setPanelProposal(job.final_proposal_text || job.proposal_text || '')
+    setShowOriginal(null)
     setDirtyFields(new Set())
 
     // Fetch history
@@ -368,8 +382,12 @@ export default function PipelinePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           loom_link: panelLoomLink,
+          loom_duration: panelLoomDuration || null,
           demo_url: panelDemoUrl,
           notes: panelNotes,
+          final_claude_prompt: panelPrompt || null,
+          final_loom_script: panelScript || null,
+          final_proposal_text: panelProposal || null,
         }),
       })
       if (res.ok) {
@@ -386,7 +404,7 @@ export default function PipelinePage() {
     } finally {
       setSaving(false)
     }
-  }, [selectedJob, panelLoomLink, panelDemoUrl, panelNotes, toast])
+  }, [selectedJob, panelLoomLink, panelLoomDuration, panelDemoUrl, panelNotes, panelPrompt, panelScript, panelProposal, toast])
 
   // -------------------------------------------------------------------------
   // Render: Loading state
@@ -524,6 +542,11 @@ export default function PipelinePage() {
               setPanelLoomLink(v)
               setDirtyFields((prev) => new Set(prev).add('loom_link'))
             }}
+            panelLoomDuration={panelLoomDuration}
+            setPanelLoomDuration={(v) => {
+              setPanelLoomDuration(v)
+              setDirtyFields((prev) => new Set(prev).add('loom_duration'))
+            }}
             panelDemoUrl={panelDemoUrl}
             setPanelDemoUrl={(v) => {
               setPanelDemoUrl(v)
@@ -534,6 +557,23 @@ export default function PipelinePage() {
               setPanelNotes(v)
               setDirtyFields((prev) => new Set(prev).add('notes'))
             }}
+            panelPrompt={panelPrompt}
+            setPanelPrompt={(v) => {
+              setPanelPrompt(v)
+              setDirtyFields((prev) => new Set(prev).add('final_claude_prompt'))
+            }}
+            panelScript={panelScript}
+            setPanelScript={(v) => {
+              setPanelScript(v)
+              setDirtyFields((prev) => new Set(prev).add('final_loom_script'))
+            }}
+            panelProposal={panelProposal}
+            setPanelProposal={(v) => {
+              setPanelProposal(v)
+              setDirtyFields((prev) => new Set(prev).add('final_proposal_text'))
+            }}
+            showOriginal={showOriginal}
+            setShowOriginal={setShowOriginal}
             panelStage={panelStage}
             setPanelStage={setPanelStage}
             dirtyFields={dirtyFields}
@@ -676,10 +716,20 @@ interface SlideOverPanelProps {
   historyLoading: boolean
   panelLoomLink: string
   setPanelLoomLink: (v: string) => void
+  panelLoomDuration: string
+  setPanelLoomDuration: (v: string) => void
   panelDemoUrl: string
   setPanelDemoUrl: (v: string) => void
   panelNotes: string
   setPanelNotes: (v: string) => void
+  panelPrompt: string
+  setPanelPrompt: (v: string) => void
+  panelScript: string
+  setPanelScript: (v: string) => void
+  panelProposal: string
+  setPanelProposal: (v: string) => void
+  showOriginal: string | null
+  setShowOriginal: (v: string | null) => void
   panelStage: PipelineStage | string
   setPanelStage: (v: PipelineStage | string) => void
   dirtyFields: Set<string>
@@ -696,10 +746,20 @@ function SlideOverPanel({
   historyLoading,
   panelLoomLink,
   setPanelLoomLink,
+  panelLoomDuration,
+  setPanelLoomDuration,
   panelDemoUrl,
   setPanelDemoUrl,
   panelNotes,
   setPanelNotes,
+  panelPrompt,
+  setPanelPrompt,
+  panelScript,
+  setPanelScript,
+  panelProposal,
+  setPanelProposal,
+  showOriginal,
+  setShowOriginal,
   panelStage,
   setPanelStage,
   dirtyFields,
@@ -911,20 +971,38 @@ function SlideOverPanel({
             </div>
           </div>
 
-          {/* Copyable Code Blocks */}
-          {job.claude_code_prompt && (
-            <CopyableBlock
+          {/* Editable Generated Content */}
+          {(job.claude_code_prompt || panelPrompt) && (
+            <EditableContentBlock
               label="Claude Code Prompt"
-              content={job.claude_code_prompt}
+              value={panelPrompt}
+              onChange={setPanelPrompt}
+              original={job.claude_code_prompt}
+              showOriginal={showOriginal === 'prompt'}
+              onToggleOriginal={() => setShowOriginal(showOriginal === 'prompt' ? null : 'prompt')}
             />
           )}
 
-          {job.loom_script && (
-            <CopyableBlock label="Loom Script" content={job.loom_script} />
+          {(job.loom_script || panelScript) && (
+            <EditableContentBlock
+              label="Loom Script"
+              value={panelScript}
+              onChange={setPanelScript}
+              original={job.loom_script}
+              showOriginal={showOriginal === 'script'}
+              onToggleOriginal={() => setShowOriginal(showOriginal === 'script' ? null : 'script')}
+            />
           )}
 
-          {job.proposal_text && (
-            <CopyableBlock label="Proposal Text" content={job.proposal_text} />
+          {(job.proposal_text || panelProposal) && (
+            <EditableContentBlock
+              label="Proposal Text"
+              value={panelProposal}
+              onChange={setPanelProposal}
+              original={job.proposal_text}
+              showOriginal={showOriginal === 'proposal'}
+              onToggleOriginal={() => setShowOriginal(showOriginal === 'proposal' ? null : 'proposal')}
+            />
           )}
 
           {/* Editable Fields */}
@@ -955,7 +1033,7 @@ function SlideOverPanel({
               </select>
             </div>
 
-            {/* Loom/Tella Link */}
+            {/* Loom/Tella Link + Duration */}
             <div>
               <label className="mb-1 flex items-center gap-2 text-xs text-zinc-500">
                 Loom / Tella Link
@@ -963,14 +1041,27 @@ function SlideOverPanel({
                   <span className="text-[10px] text-amber-400">unsaved</span>
                 )}
               </label>
-              <input
-                type="url"
-                value={panelLoomLink}
-                onChange={(e) => setPanelLoomLink(e.target.value)}
-                onBlur={() => onPatchField(job.id, 'loom_link', panelLoomLink)}
-                placeholder="https://www.loom.com/share/..."
-                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-zinc-600"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={panelLoomLink}
+                  onChange={(e) => setPanelLoomLink(e.target.value)}
+                  onBlur={() => onPatchField(job.id, 'loom_link', panelLoomLink)}
+                  placeholder="https://www.loom.com/share/..."
+                  className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none transition focus:border-zinc-600"
+                />
+                <div className="w-20">
+                  <input
+                    type="text"
+                    value={panelLoomDuration}
+                    onChange={(e) => setPanelLoomDuration(e.target.value)}
+                    placeholder="1:32"
+                    title="Duration"
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-2 text-center text-sm text-white placeholder-zinc-600 outline-none transition focus:border-zinc-600"
+                  />
+                  <span className="mt-0.5 block text-center text-[10px] text-zinc-600">Duration</span>
+                </div>
+              </div>
             </div>
 
             {/* Demo URL */}
@@ -1079,21 +1170,55 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// CopyableBlock sub-component
+// EditableContentBlock sub-component
 // ---------------------------------------------------------------------------
 
-function CopyableBlock({ label, content }: { label: string; content: string }) {
+function EditableContentBlock({
+  label,
+  value,
+  onChange,
+  original,
+  showOriginal,
+  onToggleOriginal,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  original: string | null
+  showOriginal: boolean
+  onToggleOriginal: () => void
+}) {
+  const hasOriginal = original != null && original !== value
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-500">
           {label}
         </h3>
-        <CopyButton text={content} label="Copy" />
+        <div className="flex items-center gap-2">
+          {hasOriginal && (
+            <button
+              onClick={onToggleOriginal}
+              className="text-[11px] text-zinc-500 hover:text-zinc-300 transition"
+            >
+              {showOriginal ? 'Back to edited' : 'View AI original'}
+            </button>
+          )}
+          <CopyButton text={value} label="Copy" />
+        </div>
       </div>
-      <pre className="max-h-48 overflow-auto rounded-lg border border-zinc-800 bg-zinc-900/80 p-3 text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
-        {content}
-      </pre>
+      {showOriginal && original ? (
+        <pre className="max-h-48 overflow-auto rounded-lg border border-zinc-800 bg-zinc-900/80 p-3 text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap">
+          {original}
+        </pre>
+      ) : (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={8}
+          className="w-full resize-y rounded-lg border border-zinc-800 bg-zinc-900/80 p-3 font-mono text-xs text-zinc-300 leading-relaxed outline-none transition focus:border-zinc-600 whitespace-pre-wrap"
+        />
+      )}
     </div>
   )
 }

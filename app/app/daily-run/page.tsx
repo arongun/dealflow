@@ -618,6 +618,10 @@ export default function DailyRunPage() {
     setSkipInputOpen({})
     setSkipNotes({})
     setShowVerdictDropdown(null)
+    setEditedPrompts({})
+    setEditedScripts({})
+    setEditedProposals({})
+    setSavingContent({})
     localStorage.removeItem('dailyrun_upworkLinks')
     localStorage.removeItem('dailyrun_fullDescriptions')
   }, [])
@@ -1215,11 +1219,13 @@ export default function DailyRunPage() {
                               <span className="text-xs font-medium text-zinc-500">
                                 Claude Code Prompt
                               </span>
-                              <CopyButton text={content.prompt} label="Copy" />
+                              <CopyButton text={editedPrompts[job.id] ?? content.prompt} label="Copy" />
                             </div>
-                            <pre className="max-h-[300px] overflow-auto rounded-lg bg-zinc-800 p-3 text-sm text-zinc-300">
-                              <code>{content.prompt}</code>
-                            </pre>
+                            <textarea
+                              value={editedPrompts[job.id] ?? content.prompt}
+                              onChange={(e) => setEditedPrompts((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                              className="max-h-[400px] min-h-[200px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 p-3 font-mono text-sm text-zinc-300 outline-none transition focus:border-zinc-500"
+                            />
                           </div>
                         )}
 
@@ -1229,11 +1235,13 @@ export default function DailyRunPage() {
                               <span className="text-xs font-medium text-zinc-500">
                                 Loom Script
                               </span>
-                              <CopyButton text={content.script} label="Copy" />
+                              <CopyButton text={editedScripts[job.id] ?? content.script} label="Copy" />
                             </div>
-                            <pre className="max-h-[300px] overflow-auto rounded-lg bg-zinc-800 p-3 text-sm text-zinc-300">
-                              <code>{content.script}</code>
-                            </pre>
+                            <textarea
+                              value={editedScripts[job.id] ?? content.script}
+                              onChange={(e) => setEditedScripts((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                              className="max-h-[400px] min-h-[200px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 p-3 font-mono text-sm text-zinc-300 outline-none transition focus:border-zinc-500"
+                            />
                           </div>
                         )}
 
@@ -1243,13 +1251,26 @@ export default function DailyRunPage() {
                               <span className="text-xs font-medium text-zinc-500">
                                 Proposal Text
                               </span>
-                              <CopyButton text={content.proposal} label="Copy" />
+                              <CopyButton text={editedProposals[job.id] ?? content.proposal} label="Copy" />
                             </div>
-                            <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-800 p-3 text-sm text-zinc-300">
-                              <code>{content.proposal}</code>
-                            </pre>
+                            <textarea
+                              value={editedProposals[job.id] ?? content.proposal}
+                              onChange={(e) => setEditedProposals((prev) => ({ ...prev, [job.id]: e.target.value }))}
+                              className="max-h-[300px] min-h-[120px] w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-300 outline-none transition focus:border-zinc-500"
+                            />
                           </div>
                         )}
+
+                        {/* Save edits button */}
+                        <div className="flex justify-end">
+                          <button
+                            onClick={() => handleSaveContent(job.id)}
+                            disabled={savingContent[job.id]}
+                            className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {savingContent[job.id] ? 'Saving...' : 'Save Changes'}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

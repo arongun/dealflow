@@ -69,6 +69,10 @@ export const jobUpdateSchema = z.object({
   claude_code_prompt: z.string().optional(),
   loom_script: z.string().optional(),
   proposal_text: z.string().optional(),
+  final_claude_prompt: z.string().nullable().optional(),
+  final_loom_script: z.string().nullable().optional(),
+  final_proposal_text: z.string().nullable().optional(),
+  loom_duration: z.string().nullable().optional(),
 })
 
 export const bulkParseInputSchema = z.object({

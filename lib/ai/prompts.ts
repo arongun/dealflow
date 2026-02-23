@@ -70,30 +70,84 @@ Return ONLY valid JSON with no markdown formatting:
   "ai_estimated_effort": string
 }`
 
-export const LOOM_SCRIPT_SYSTEM = `Write a Loom video script for a freelance developer applying to an Upwork job. The script should be casual, confident, and under 2 minutes when read aloud.
+export const LOOM_SCRIPT_SYSTEM = `Write a Loom video script for a freelance developer applying to an Upwork job. The script must be UNDER 2 MINUTES when read aloud at natural pace (roughly 280 words max).
 
-Structure:
-1. Quick intro — "Hey [client name if known], saw your posting about [X]"
-2. Show the demo or relevant past work — walk through 2-3 key features
-3. Explain your approach — how you'd tackle the full project
-4. Soft close — "Happy to jump on a quick call to discuss"
+The tone is casual, confident, and gets straight to the value. No fluff, no formal intros.
 
-Keep it natural, not salesy. Include [SHOW: description] cues for screen actions.
-Return just the script text, no JSON.`
+Structure (follow this exactly):
+1. OPENER (5-10 seconds): "Hey, how's it going? I came across your post about [specific thing] and [one specific observation about their project/need], so I went ahead and built you a working demo."
+2. DEMO WALKTHROUGH (60-80 seconds): Show the demo live. Walk through 2-3 key features that directly address what they asked for. Include [SHOW: description] cues for screen actions. Be specific about what you're showing and WHY it matters to them.
+3. ANSWER THEIR QUESTIONS (15-20 seconds): If the job post has specific questions or requirements they asked applicants to answer, address 1-2 of them briefly while showing the demo or right after. Don't skip things they explicitly asked about.
+4. SOCIAL PROOF (10-15 seconds): Briefly mention one or two other relevant projects IF relevant to what they need. Options to reference:
+   - "Bingo AI" — an AI image generation app with over 6,000 users
+   - "Tomorrow Flow" — a weekly business review system tracking business metrics
+   Only mention these if they relate to what the client needs. Don't force it. Skip this section entirely if neither is relevant.
+5. CLOSE (5 seconds): "So yeah, I'm pretty confident I'm your guy. Looking forward to hearing from you — thanks so much!"
 
-export const PROPOSAL_SYSTEM = `Write an Upwork proposal for a freelance developer. Keep it under 200 words, casual but professional.
+Rules:
+- NEVER start with "Dear" or any formal greeting
+- NEVER say "I am writing to" or "I would like to"
+- Get to showing the demo within the first 15 seconds
+- The whole script should feel like talking to a friend who asked for help, not pitching a client
+- Keep it under 280 words total
+- Include [SHOW: ...] cues throughout for screen actions
 
-Structure:
-1. Hook — reference something specific from their job post (1 sentence)
-2. Proof — mention the demo you built or relevant experience (1-2 sentences)
-3. Approach — briefly how you'd tackle it (1-2 sentences)
-4. Links — demo + loom
-5. Close — available to start this week, suggest a quick call
+Return just the script text, no JSON wrapper.`
 
-Do NOT start with "Dear client" or "I am writing to". Start with something that shows you actually read the posting.
-Return just the proposal text, no JSON.`
+export const PROPOSAL_SYSTEM = `Write an ultra-short Upwork proposal. Maximum 3-4 lines. The tone is confident and casual.
 
-export const CLAUDE_CODE_PROMPT_SYSTEM = `You are generating a detailed prompt for Claude Code (an AI coding tool) to build a demo web application. The prompt should be specific, actionable, and include all necessary context for building the demo.`
+Use one of these two formats randomly (vary between them):
+
+Format A:
+"Hey! I'm REALLY confident I'm the right fit so I built you a working demo and recorded a quick {loom_duration or "short"} video showing you why :)
+{loom_link or "[LOOM_LINK]"}
+Looking forward to hearing from you!"
+
+Format B:
+"Hey! I ALREADY built you a working demo since I'm so confident I'm the right fit :)
+I recorded a quick {loom_duration or "short"} video where I show you it here:
+{loom_link or "[LOOM_LINK]"}
+Looking forward to hearing from you!"
+
+If the job post has specific questions they require answered in the proposal (like "answer these 3 questions"), add a SHORT section answering them after the link — keep each answer to 1-2 sentences max. But still keep the total proposal under 8 lines even with answers.
+
+Rules:
+- The Loom/video link IS the proposal — the video does the selling
+- Keep it to 3-4 lines max when there are no required questions, up to 8 lines if there are required questions to answer
+- Casual, confident tone — like texting a friend
+- NEVER include a separate demo link, it's shown in the video
+- NEVER list skills, experience, or qualifications in text — the video handles all of that
+- NEVER start with "Dear", "I am writing to", or any formal opener
+
+Return just the proposal text, no JSON wrapper.`
+
+export const CLAUDE_CODE_PROMPT_SYSTEM = `You are generating a build prompt for Claude Code to create a frontend demo in a Next.js showcase repo. The repo already has its own CLAUDE.md with all conventions, patterns, component libraries (shadcn/ui), middleware, and design system — do NOT repeat any of that in the prompt you generate.
+
+Your job is to describe WHAT to build with enough specificity that Claude Code can produce an impressive, realistic demo. Focus on:
+
+1. The overall concept (1-2 sentences — what is this demo? who is it for?)
+2. Specific screens and features as bullet points. For each one, name:
+   - What UI components to show (tables, charts, cards, modals, forms, tabs, etc.)
+   - What data to display (name specific KPIs, metrics, list items, etc. — be specific about the data shape)
+   - What interactions exist (filters, search, sorting, toggles, expandable rows, modals, etc.)
+3. A design direction sentence that captures the visual feel the client would expect
+4. A quality bar statement about who the client is and what would impress them
+
+Be SPECIFIC about screens and components.
+BAD: "a dashboard"
+GOOD: "a dashboard with 4 KPI cards (MRR, Active Users, Churn Rate, Revenue Growth), a Recharts area chart showing monthly revenue over 12 months, and a recent activity table with timestamp, event type, and status badges"
+
+Think about what would make the client say "holy shit, they already built this?" when they open the demo link.
+
+Do NOT include in the generated prompt:
+- The full job description text
+- Instructions about the repo structure, middleware, or auth patterns (the repo's own CLAUDE.md handles all of this)
+- Generic instructions like "make it responsive" or "use realistic data" (the repo already enforces this)
+- Any mention of shadcn/ui, Tailwind, or other tech choices (the repo knows its own stack)
+
+Extract the company name or project name for the slug. If no company name exists, derive a short 2-3 word slug from the core concept.
+
+Output ONLY the formatted Claude Code prompt using the template provided. No wrapper, no explanation.`
 
 export function buildDeepVetUserMessage(job: {
   title: string
@@ -120,57 +174,66 @@ export function buildLoomScriptMessage(job: {
   deep_vet_approach: string | null
 }): string {
   return `Job: ${job.title}
-What was built: ${job.deep_vet_approach || 'Relevant experience walkthrough'}
-Demo URL: ${job.demo_url || 'N/A'}
-Key client needs: ${job.full_description?.slice(0, 500) || 'See job description'}`
+Demo URL: ${job.demo_url || '[DEMO_LINK]'}
+Key thing the client needs: ${job.deep_vet_approach || 'See job description'}
+
+Full job post (for context on what they asked and any specific questions):
+${job.full_description?.slice(0, 1500) || 'Not available'}`
 }
 
 export function buildProposalMessage(job: {
   title: string
   full_description: string | null
-  demo_url: string | null
   loom_link: string | null
+  loom_duration: string | null
 }): string {
   return `Job: ${job.title}
-Key requirements: ${job.full_description?.slice(0, 500) || 'See job description'}
-Demo link: ${job.demo_url || '[DEMO_LINK]'}
-Loom link: ${job.loom_link || '[LOOM_LINK]'}`
+Loom link: ${job.loom_link || '[LOOM_LINK]'}
+Loom duration: ${job.loom_duration || 'short'}
+
+Full job post (check if they have required questions applicants must answer):
+${job.full_description?.slice(0, 1500) || 'Not available'}`
 }
 
-export function buildClaudeCodePromptMessage(job: {
+export function buildClaudeCodePromptUserMessage(job: {
   title: string
   full_description: string | null
   deep_vet_approach: string | null
+  slug: string
+  token: string
+  password: string
 }): string {
-  const slug = job.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40)
+  return `Generate a Claude Code build prompt using this template:
 
-  const token = `rd_${Math.random().toString(36).slice(2, 10)}`
-  const password = Math.random().toString(36).slice(2, 10)
+\`\`\`
+Build a demo for a potential client in the aronbuilds showcase repo.
 
-  return `Build a demo for a potential Upwork client in the aronbuilds showcase repo.
+Route: src/app/(demos)/${job.slug}/page.tsx
+Token: ${job.token}
+Password: ${job.password}
+Access URL: https://aronbuilds.vercel.app/${job.slug}?key=${job.token}
 
-Add a new demo route at: src/app/(demos)/${slug}/page.tsx
-Token: ${token}
-Password: ${password}
+## What to Build
+{1-2 sentences describing the overall demo concept and who it's for}
 
-The demo should showcase: ${job.deep_vet_approach || job.full_description || job.title}
+Key screens/features:
+- {Screen/Feature 1}: {specific components, data to display, interactions}
+- {Screen/Feature 2}: {specific components, data to display, interactions}
+- {Screen/Feature 3}: {specific components, data to display, interactions}
+- {Screen/Feature 4 if needed}: {specific components, data to display, interactions}
 
-Based on job: "${job.title}"
-${job.full_description ? `\nFull job description:\n${job.full_description}` : ''}
+Design direction: {1 sentence on the visual feel}
 
-Requirements:
-- Use the same patterns as existing demos in the repo (check src/app/(demos)/ for examples)
-- Use shadcn/ui components (already installed in the repo)
-- Use Tailwind for styling, match the professional quality of existing demos
-- Include realistic mock data (never use Lorem Ipsum)
-- Make it responsive
-- Add the token/password check following the same middleware pattern as other demos
+This demo should impress a client who {1 sentence about their expectations/standards}. Go beyond basics — include hover states, loading states, transitions, and realistic data that makes it feel like a shipped product, not a prototype.
 
-The access URL will be: https://aronbuilds.vercel.app/${slug}?key=${token}
+After building: git add . && git commit -m "Add ${job.slug} demo" && git push
+\`\`\`
 
-After building, run \`git add . && git commit -m "Add ${slug} demo" && git push\` to deploy.`
+Job title: ${job.title}
+Suggested approach: ${job.deep_vet_approach || 'Build based on job requirements'}
+
+Job description (for understanding what to build — do NOT include this text in the output):
+${job.full_description?.slice(0, 2000) || 'Not available'}
+
+Remember: Output ONLY the filled-in template. The slug is "${job.slug}". Extract as much specificity as you can from the job description to make the prompt highly detailed.`
 }

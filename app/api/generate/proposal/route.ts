@@ -30,8 +30,8 @@ export async function POST(request: NextRequest) {
     const message = buildProposalMessage({
       title: job.title,
       full_description: job.full_description,
-      demo_url: job.demo_url,
       loom_link: job.loom_link,
+      loom_duration: job.loom_duration,
     })
 
     const proposal = await callClaude(PROPOSAL_SYSTEM, message)
