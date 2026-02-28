@@ -4,6 +4,8 @@ import { callClaude, extractJSON } from '@/lib/ai/claude'
 import { DEEP_VET_SYSTEM, buildDeepVetUserMessage } from '@/lib/ai/prompts'
 import { deepVetInputSchema, deepVetResultSchema } from '@/lib/schemas'
 
+export const maxDuration = 120
+
 export async function POST(request: NextRequest) {
   const supabase = createServerClient()
   const body = await request.json()

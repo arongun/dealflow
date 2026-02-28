@@ -3,6 +3,8 @@ import { createServerClient } from '@/lib/supabase/server'
 import { callClaude, extractJSON } from '@/lib/ai/claude'
 import { BULK_PARSE_SYSTEM } from '@/lib/ai/prompts'
 import { bulkParseInputSchema, parseResultSchema, parsedJobSchema } from '@/lib/schemas'
+
+export const maxDuration = 300
 import { generateDedupHash, splitRawTextIntoChunks, extractChunkIdentity } from '@/lib/dedup'
 
 function resolveRelativeTime(relativeStr: string | null | undefined): string | null {

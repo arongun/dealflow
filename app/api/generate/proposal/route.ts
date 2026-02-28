@@ -4,6 +4,8 @@ import { callClaude } from '@/lib/ai/claude'
 import { PROPOSAL_SYSTEM, buildProposalMessage } from '@/lib/ai/prompts'
 import { generatePromptInputSchema } from '@/lib/schemas'
 
+export const maxDuration = 120
+
 export async function POST(request: NextRequest) {
   const supabase = createServerClient()
   const body = await request.json()
