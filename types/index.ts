@@ -32,6 +32,7 @@ export interface Job {
   client_rating: string | null
   client_hires: number | null
   proposals_count: string | null
+  has_hire: boolean
   skills: string[] | null
   posted_at: string | null
   job_category: string | null
@@ -126,6 +127,7 @@ export interface ParsedJob {
   client_spend: string | null
   client_rating: string | null
   proposals_count: string | null
+  has_hire: boolean
   skills: string[]
   posted_at: string | null
   ai_score: number

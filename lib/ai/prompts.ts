@@ -11,6 +11,7 @@ For each job, extract:
 - client_spend: total amount spent on platform if shown
 - client_rating: star rating if shown
 - proposals_count: number of proposals if shown
+- has_hire: true if the job indicates someone has already been hired (look for "Hire" badge, "1 hire" text, or similar indicators), false otherwise
 - skills: array of skill tags if shown
 - posted_at: when posted if shown (e.g. "2 hours ago", "yesterday")
 
@@ -20,6 +21,7 @@ Then score each job 1-5 based on:
 - Client quality (high spend, good rating, low proposals = good)
 - Feasibility (can a solo dev build this in days, not months?)
 - Demo potential (can we build a quick impressive prototype?)
+- IMPORTANT: If the job already has a hire, this is a MAJOR red flag. Heavily penalize the score — the client likely already found someone. Mention this prominently in ai_reasoning (e.g. "Already has a hire — likely filled.").
 
 Classify each as:
 - GO: score >= 4, strong fit, worth pursuing
@@ -43,6 +45,7 @@ Return ONLY valid JSON with no markdown formatting:
     "client_spend": string | null,
     "client_rating": string | null,
     "proposals_count": string | null,
+    "has_hire": boolean,
     "skills": string[],
     "posted_at": string | null,
     "ai_score": number,

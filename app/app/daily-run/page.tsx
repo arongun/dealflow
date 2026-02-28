@@ -23,6 +23,7 @@ interface DailyRunJob {
   client_spend: string | null
   client_rating: number | null
   proposals_count: number | null
+  has_hire: boolean
   skills: string[] | null
   posted_at: string | null
   ai_score: number
@@ -129,6 +130,7 @@ export default function DailyRunPage() {
   const [rawText, setRawText] = useState('')
   const [phase, setPhase] = useState<Phase>('input')
   const [parseLoading, setParseLoading] = useState(false)
+  const [parseProgress, setParseProgress] = useState('')
   const [parseSummary, setParseSummary] = useState<ParseResponse | null>(null)
   const [jobs, setJobs] = useState<DailyRunJob[]>([])
   const [initialLoadDone, setInitialLoadDone] = useState(false)
@@ -266,6 +268,7 @@ export default function DailyRunPage() {
     }
 
     setParseLoading(true)
+    setParseProgress('Starting analysis...')
     try {
       const res = await fetch('/api/jobs/parse', {
         method: 'POST',
@@ -277,42 +280,118 @@ export default function DailyRunPage() {
       })
 
       if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Parse failed')
+        const errText = await res.text()
+        let errMsg = 'Parse failed'
+        try { errMsg = JSON.parse(errText).error || errMsg } catch {}
+        throw new Error(errMsg)
       }
 
-      const data: ParseResponse = await res.json()
-      setParseSummary(data)
+      // Read SSE stream
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response stream')
 
-      // Only show GO and NEEDS_REVIEW jobs, sorted by ai_score descending
-      const displayJobs = data.jobs
-        .filter((j) => j.ai_verdict === 'GO' || j.ai_verdict === 'NEEDS_REVIEW')
-        .sort((a, b) => b.ai_score - a.ai_score)
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let summaryData: ParseResponse | null = null
+      let totalJobsSoFar = 0
 
-      // Merge with any existing jobs (don't lose them)
-      setJobs((prev) => {
-        const existingIds = new Set(prev.map((j) => j.id))
-        const newJobs = displayJobs.filter((j) => !existingIds.has(j.id))
-        return [...prev, ...newJobs].sort((a, b) => (b.ai_score ?? 0) - (a.ai_score ?? 0))
-      })
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-      // Initialize statuses for new jobs only
-      setJobStatuses((prev) => {
-        const next = { ...prev }
-        displayJobs.forEach((j) => {
-          if (!next[j.id]) next[j.id] = 'active'
-        })
-        return next
-      })
+        buffer += decoder.decode(value, { stream: true })
+
+        // Parse SSE events from buffer
+        const lines = buffer.split('\n')
+        buffer = ''
+
+        let currentEvent = ''
+        let currentData = ''
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim()
+          } else if (line.startsWith('data: ')) {
+            currentData = line.slice(6)
+          } else if (line === '' && currentEvent && currentData) {
+            // Process complete event
+            try {
+              const payload = JSON.parse(currentData)
+
+              if (currentEvent === 'batch') {
+                const batchJobs: DailyRunJob[] = payload.jobs ?? []
+                totalJobsSoFar += payload.batchStats?.parsed ?? batchJobs.length
+
+                setParseProgress(
+                  `Batch ${payload.batch}/${payload.totalBatches} complete — ${totalJobsSoFar} jobs analyzed`
+                )
+
+                // Filter to GO + NEEDS_REVIEW and add to state
+                const displayJobs = batchJobs.filter(
+                  (j: DailyRunJob) => j.ai_verdict === 'GO' || j.ai_verdict === 'NEEDS_REVIEW'
+                )
+
+                if (displayJobs.length > 0) {
+                  setJobs((prev) => {
+                    const existingIds = new Set(prev.map((j) => j.id))
+                    const newJobs = displayJobs.filter((j: DailyRunJob) => !existingIds.has(j.id))
+                    return [...prev, ...newJobs].sort(
+                      (a, b) => (b.ai_score ?? 0) - (a.ai_score ?? 0)
+                    )
+                  })
+
+                  setJobStatuses((prev) => {
+                    const next = { ...prev }
+                    displayJobs.forEach((j: DailyRunJob) => {
+                      if (!next[j.id]) next[j.id] = 'active'
+                    })
+                    return next
+                  })
+
+                  // Show cards as they arrive
+                  setPhase('parsed')
+                }
+              } else if (currentEvent === 'summary') {
+                summaryData = {
+                  total_found: payload.total_found ?? 0,
+                  total_parsed: payload.total_parsed ?? 0,
+                  total_go: payload.total_go ?? 0,
+                  total_no_go: payload.total_no_go ?? 0,
+                  total_review: payload.total_review ?? 0,
+                  total_blocked: payload.total_blocked ?? 0,
+                  total_pre_filtered: payload.total_pre_filtered ?? 0,
+                  jobs: [],
+                }
+                setParseSummary(summaryData)
+              } else if (currentEvent === 'error') {
+                toast(payload.message || `Batch ${payload.batch} failed`, 'error')
+              }
+              // 'done' event — stream complete, loop will end naturally
+            } catch {
+              // Ignore malformed JSON
+            }
+
+            currentEvent = ''
+            currentData = ''
+          } else if (line !== '') {
+            // Incomplete event, keep in buffer
+            buffer += line + '\n'
+          }
+        }
+      }
 
       setPhase('parsed')
-      const preFilterMsg = data.total_pre_filtered > 0 ? `${data.total_pre_filtered} dupes skipped, ` : ''
-      toast(`Analysis complete: ${preFilterMsg}${data.total_go} GO, ${data.total_review} to review`, 'success')
+      if (summaryData) {
+        const s = summaryData
+        const preFilterMsg = s.total_pre_filtered > 0 ? `${s.total_pre_filtered} dupes skipped, ` : ''
+        toast(`Analysis complete: ${preFilterMsg}${s.total_go} GO, ${s.total_review} to review`, 'success')
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to analyze jobs'
       toast(message, 'error')
     } finally {
       setParseLoading(false)
+      setParseProgress('')
     }
   }, [rawText, selectedSearchId, toast])
 
@@ -612,6 +691,7 @@ export default function DailyRunPage() {
   const handleReset = useCallback(() => {
     setPhase('input')
     setRawText('')
+    setParseProgress('')
     setParseSummary(null)
     setJobs([])
     setDeepVetLoading(false)
@@ -712,7 +792,7 @@ export default function DailyRunPage() {
                 {parseLoading ? (
                   <span className="flex items-center gap-2">
                     <LoadingDots />
-                    Analyzing jobs...
+                    {parseProgress || 'Analyzing jobs...'}
                   </span>
                 ) : (
                   'Run Analysis'
@@ -968,6 +1048,9 @@ export default function DailyRunPage() {
                       )}
                       {job.proposals_count != null && (
                         <span>{job.proposals_count} proposals</span>
+                      )}
+                      {job.has_hire && (
+                        <span className="text-red-400 font-medium">Hired</span>
                       )}
                       {job.posted_at && (
                         <span>Posted: {formatPostedAt(job.posted_at)}</span>
@@ -1330,10 +1413,10 @@ export default function DailyRunPage() {
         <div className="mt-6 flex flex-col items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 px-5 py-16">
           <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
           <p className="text-sm text-zinc-300">
-            Analyzing jobs<LoadingDots />
+            {parseProgress || <>Analyzing jobs<LoadingDots /></>}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
-            This may take 15-30 seconds depending on the number of jobs.
+            Jobs appear as each batch completes.
           </p>
         </div>
       )}
@@ -1409,6 +1492,12 @@ export default function DailyRunPage() {
                     <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
                       <span className="block text-zinc-600">Proposals</span>
                       <span className="text-zinc-300">{job.proposals_count}</span>
+                    </div>
+                  )}
+                  {job.has_hire && (
+                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+                      <span className="block text-red-400/70">Status</span>
+                      <span className="text-red-400 font-medium">Hired</span>
                     </div>
                   )}
                   {job.posted_at && (

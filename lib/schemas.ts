@@ -9,6 +9,7 @@ export const parsedJobSchema = z.object({
   client_spend: z.string().nullable().optional().default(null),
   client_rating: z.string().nullable().optional().default(null),
   proposals_count: z.string().nullable().optional().default(null),
+  has_hire: z.boolean().optional().default(false),
   skills: z.array(z.string()).optional().default([]),
   posted_at: z.string().nullable().optional().default(null),
   ai_score: z.number().min(1).max(5),
