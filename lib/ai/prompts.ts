@@ -26,7 +26,11 @@ Classify each as:
 - NEEDS_REVIEW: score 2.5-3.9, might be worth it but needs full description
 - NO-GO: score < 2.5, wrong stack/budget/scope
 
-For NO-GO, provide a brief reason (e.g. "Wrong stack: .NET/Angular", "Budget too low: $200", "Scope too large: 6-month enterprise rebuild")
+For ai_reasoning: Start with a 1-sentence TLDR of what they want built, THEN 1-2 short sentences on why it scores this way. Be punchy and concise — no fluff.
+Examples:
+- "They want an AI chatbot that queries internal company docs via RAG. Good budget ($3K), strong client (5.0, $90K+ spend), core stack is Next.js + vector DB + Claude — solid fit."
+- "Social media dashboard tracking brand mentions across platforms. $2,500 fixed for multi-API work is tight, but client is solid (5.0, pays well) and scope is clear."
+- "WordPress migration plugin. Wrong stack entirely — PHP/WordPress, not our world."
 
 Return ONLY valid JSON with no markdown formatting:
 {
