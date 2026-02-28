@@ -137,6 +137,8 @@ export default function DailyRunPage() {
 
   // Phase 2 state
   const [deepVetLoading, setDeepVetLoading] = useState(false)
+  const [deepVetProgress, setDeepVetProgress] = useState('')
+  const [deepVettingJobs, setDeepVettingJobs] = useState<Record<string, boolean>>({})
   const [generatedContent, setGeneratedContent] = useState<Record<string, GeneratedContent>>({})
   const [generatingJobs, setGeneratingJobs] = useState<Record<string, boolean>>({})
 
@@ -397,8 +399,75 @@ export default function DailyRunPage() {
 
   // ── Phase 2: Deep Vet ───────────────────────────────────────
 
+  // Helper: deep vet a single job via API
+  const deepVetSingleJob = useCallback(
+    async (job: DailyRunJob) => {
+      // Save upwork link and description to DB first
+      const updates: Record<string, string> = {}
+      if (upworkLinks[job.id]) updates.upwork_link = upworkLinks[job.id]
+      if (fullDescriptions[job.id]) updates.full_description = fullDescriptions[job.id]
+      if (Object.keys(updates).length > 0) {
+        await fetch(`/api/jobs/${job.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+      }
+
+      const res = await fetch('/api/jobs/deep-vet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobs: [
+            {
+              id: job.id,
+              title: job.title,
+              budget_display: job.budget_display,
+              ai_score: job.ai_score,
+              client_location: job.client_location,
+              client_spend: job.client_spend,
+              client_rating: job.client_rating,
+              full_description: fullDescriptions[job.id],
+              upwork_link: upworkLinks[job.id] || undefined,
+            },
+          ],
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Deep vet failed')
+      }
+
+      const data = await res.json()
+      const result = data.results?.[0]
+
+      if (result && !result.error) {
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === job.id
+              ? {
+                  ...j,
+                  deep_vet_score: result.deep_vet_score ?? null,
+                  deep_vet_verdict: result.deep_vet_verdict ?? null,
+                  deep_vet_reasoning: result.deep_vet_reasoning ?? null,
+                  deep_vet_approach: result.deep_vet_approach ?? null,
+                  deep_vet_risks: result.deep_vet_risks ?? null,
+                  deep_vet_opportunities: result.deep_vet_opportunities ?? null,
+                  ai_estimated_effort: result.ai_estimated_effort ?? null,
+                }
+              : j
+          )
+        )
+      } else {
+        throw new Error(result?.error || 'Deep vet returned no result')
+      }
+    },
+    [upworkLinks, fullDescriptions]
+  )
+
+  // Bulk deep vet: process one job at a time with progressive updates
   const handleDeepVet = useCallback(async () => {
-    // Only deep vet jobs that have BOTH upwork link AND full description filled
     const jobsToVet = jobs.filter(
       (j) =>
         upworkLinks[j.id]?.trim() &&
@@ -413,76 +482,51 @@ export default function DailyRunPage() {
       return
     }
 
-    // Save upwork links and descriptions to DB first
-    for (const j of jobsToVet) {
-      const updates: Record<string, string> = {}
-      if (upworkLinks[j.id]) updates.upwork_link = upworkLinks[j.id]
-      if (fullDescriptions[j.id]) updates.full_description = fullDescriptions[j.id]
-      if (Object.keys(updates).length > 0) {
-        await fetch(`/api/jobs/${j.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updates),
-        })
-      }
-    }
-
     setDeepVetLoading(true)
-    try {
-      const res = await fetch('/api/jobs/deep-vet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobs: jobsToVet.map((j) => ({
-            id: j.id,
-            title: j.title,
-            budget_display: j.budget_display,
-            ai_score: j.ai_score,
-            client_location: j.client_location,
-            client_spend: j.client_spend,
-            client_rating: j.client_rating,
-            full_description: fullDescriptions[j.id],
-            upwork_link: upworkLinks[j.id] || undefined,
-          })),
-        }),
-      })
+    let completed = 0
+    let failed = 0
 
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Deep vet failed')
+    for (const job of jobsToVet) {
+      setDeepVetProgress(`Deep analyzing ${completed + 1}/${jobsToVet.length}: ${job.title.slice(0, 40)}...`)
+      try {
+        await deepVetSingleJob(job)
+        completed++
+      } catch (err: unknown) {
+        failed++
+        const msg = err instanceof Error ? err.message : 'Unknown error'
+        toast(`Failed: "${job.title.slice(0, 30)}..." — ${msg}`, 'error')
       }
-
-      const data = await res.json()
-
-      // Update jobs with deep vet results
-      setJobs((prev) =>
-        prev.map((j) => {
-          const result = data.results?.find((r: { id: string }) => r.id === j.id)
-          if (result && !result.error) {
-            return {
-              ...j,
-              deep_vet_score: result.deep_vet_score ?? null,
-              deep_vet_verdict: result.deep_vet_verdict ?? null,
-              deep_vet_reasoning: result.deep_vet_reasoning ?? null,
-              deep_vet_approach: result.deep_vet_approach ?? null,
-              deep_vet_risks: result.deep_vet_risks ?? null,
-              deep_vet_opportunities: result.deep_vet_opportunities ?? null,
-              ai_estimated_effort: result.ai_estimated_effort ?? null,
-            }
-          }
-          return j
-        })
-      )
-
-      setPhase('deep-vetted')
-      toast('Deep analysis complete', 'success')
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Deep vet failed'
-      toast(message, 'error')
-    } finally {
-      setDeepVetLoading(false)
     }
-  }, [jobs, fullDescriptions, upworkLinks, jobStatuses, toast])
+
+    setPhase('deep-vetted')
+    setDeepVetLoading(false)
+    setDeepVetProgress('')
+    toast(
+      `Deep analysis complete: ${completed} analyzed${failed > 0 ? `, ${failed} failed` : ''}`,
+      'success'
+    )
+  }, [jobs, fullDescriptions, upworkLinks, jobStatuses, toast, deepVetSingleJob])
+
+  // Per-job deep vet (for jobs in deep-vetted phase that weren't vetted initially)
+  const handleSingleDeepVet = useCallback(
+    async (job: DailyRunJob) => {
+      if (!upworkLinks[job.id]?.trim() || !fullDescriptions[job.id]?.trim()) {
+        toast('Fill in both the Upwork link and full description first', 'error')
+        return
+      }
+      setDeepVettingJobs((prev) => ({ ...prev, [job.id]: true }))
+      try {
+        await deepVetSingleJob(job)
+        toast('Deep analysis complete', 'success')
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Deep vet failed'
+        toast(msg, 'error')
+      } finally {
+        setDeepVettingJobs((prev) => ({ ...prev, [job.id]: false }))
+      }
+    },
+    [deepVetSingleJob, upworkLinks, fullDescriptions, toast]
+  )
 
   // ── Actions ─────────────────────────────────────────────────
 
@@ -695,6 +739,8 @@ export default function DailyRunPage() {
     setParseSummary(null)
     setJobs([])
     setDeepVetLoading(false)
+    setDeepVetProgress('')
+    setDeepVettingJobs({})
     setGeneratedContent({})
     setGeneratingJobs({})
     setUpworkLinks({})
@@ -883,7 +929,7 @@ export default function DailyRunPage() {
                 {deepVetLoading ? (
                   <span className="flex items-center gap-2">
                     <LoadingDots />
-                    Deep analyzing...
+                    {deepVetProgress || 'Deep analyzing...'}
                   </span>
                 ) : (
                   'Run Deep Analysis'
@@ -1268,53 +1314,101 @@ export default function DailyRunPage() {
                         </div>
                       )}
 
-                    {/* Show action buttons for active jobs without deep vet in deep-vetted phase */}
+                    {/* Jobs without deep vet in deep-vetted phase — show inputs + per-job vet */}
                     {phase === 'deep-vetted' &&
                       !hasDeepVet &&
                       status === 'active' && (
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
-                          <span className="text-xs text-zinc-500 italic">No deep vet data</span>
-                          <div className="ml-auto flex items-center gap-2">
-                            {skipInputOpen[job.id] ? (
-                              <>
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={skipNotes[job.id] || ''}
-                                  onChange={(e) =>
-                                    setSkipNotes((prev) => ({
+                        <div className="mt-4 space-y-3">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-zinc-500">
+                              Upwork Link
+                            </label>
+                            <input
+                              type="text"
+                              value={upworkLinks[job.id] || ''}
+                              onChange={(e) =>
+                                setUpworkLinks((prev) => ({
+                                  ...prev,
+                                  [job.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="https://www.upwork.com/jobs/~..."
+                              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-zinc-500">
+                              Full Job Description
+                            </label>
+                            <textarea
+                              value={fullDescriptions[job.id] || ''}
+                              onChange={(e) =>
+                                setFullDescriptions((prev) => ({
+                                  ...prev,
+                                  [job.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="Paste the full job description from the Upwork listing..."
+                              className="min-h-[120px] w-full resize-y rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <button
+                              onClick={() => handleSingleDeepVet(job)}
+                              disabled={deepVettingJobs[job.id] || !upworkLinks[job.id]?.trim() || !fullDescriptions[job.id]?.trim()}
+                              className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {deepVettingJobs[job.id] ? (
+                                <span className="flex items-center gap-2">
+                                  <LoadingDots />
+                                  Deep analyzing...
+                                </span>
+                              ) : (
+                                'Run Deep Vet'
+                              )}
+                            </button>
+                            <div className="flex items-center gap-2">
+                              {skipInputOpen[job.id] ? (
+                                <>
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    value={skipNotes[job.id] || ''}
+                                    onChange={(e) =>
+                                      setSkipNotes((prev) => ({
+                                        ...prev,
+                                        [job.id]: e.target.value,
+                                      }))
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSkipConfirm(job.id)
+                                      if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
+                                    }}
+                                    placeholder="Note (optional)"
+                                    className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
+                                    style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
+                                  />
+                                  <button
+                                    onClick={() => handleSkipConfirm(job.id)}
+                                    className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                                  >
+                                    Skip
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() =>
+                                    setSkipInputOpen((prev) => ({
                                       ...prev,
-                                      [job.id]: e.target.value,
+                                      [job.id]: true,
                                     }))
                                   }
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleSkipConfirm(job.id)
-                                    if (e.key === 'Escape') setSkipInputOpen((prev) => ({ ...prev, [job.id]: false }))
-                                  }}
-                                  placeholder="Note (optional)"
-                                  className="min-w-[120px] max-w-[300px] rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none transition-all focus:border-zinc-500"
-                                  style={{ width: `${Math.max(120, (skipNotes[job.id]?.length || 0) * 8 + 40)}px` }}
-                                />
-                                <button
-                                  onClick={() => handleSkipConfirm(job.id)}
-                                  className="rounded-lg bg-red-500/20 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-500/30"
+                                  className="text-sm text-zinc-500 transition hover:text-zinc-300"
                                 >
                                   Skip
                                 </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() =>
-                                  setSkipInputOpen((prev) => ({
-                                    ...prev,
-                                    [job.id]: true,
-                                  }))
-                                }
-                                className="text-sm text-zinc-500 transition hover:text-zinc-300"
-                              >
-                                Skip
-                              </button>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
