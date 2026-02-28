@@ -274,13 +274,13 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Insert GO + NEEDS_REVIEW jobs (upsert as DB-level safety net)
+          // Insert GO + NEEDS_REVIEW jobs
           let insertedJobs: any[] = []
           const jobsToInsert = [...goJobs, ...reviewJobs]
           if (jobsToInsert.length > 0) {
             const { data: inserted, error: insertError } = await supabase
               .from('jobs')
-              .upsert(jobsToInsert, { onConflict: 'dedup_hash', ignoreDuplicates: true })
+              .insert(jobsToInsert)
               .select()
 
             if (insertError) {
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
               source_saved_search_id: saved_search_id,
             }))
             await supabase.from('block_list').insert(blockEntries)
-            await supabase.from('jobs').upsert(noGoJobs, { onConflict: 'dedup_hash', ignoreDuplicates: true })
+            await supabase.from('jobs').insert(noGoJobs)
           }
 
           totalParsed += aiJobs.length
