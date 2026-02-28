@@ -139,6 +139,15 @@ function formatDate(dateStr: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function formatPostedAt(dateStr: string | null): string {
+  if (!dateStr) return '--'
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+    ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
 function getScoreColor(score: number | null | undefined): string {
   if (score == null) return 'text-zinc-500 bg-zinc-800'
   if (score >= 3.5) return 'text-emerald-400 bg-emerald-500/10'
@@ -643,6 +652,12 @@ function KanbanCard({ job, searchName, onClick }: { job: Job; searchName: string
             <span>{job.proposals_count} proposals</span>
           </>
         )}
+        {job.posted_at && (
+          <>
+            <span className="text-zinc-700">·</span>
+            <span>{formatDate(job.posted_at)}</span>
+          </>
+        )}
       </div>
 
       {/* Skills */}
@@ -840,6 +855,7 @@ function SlideOverPanel({
             <InfoCard label="Client Spend" value={job.client_spend || '--'} />
             <InfoCard label="Client Rating" value={job.client_rating || '--'} />
             <InfoCard label="Proposals" value={job.proposals_count || '--'} />
+            <InfoCard label="Posted" value={job.posted_at ? formatPostedAt(job.posted_at) : '--'} />
           </div>
 
           {/* Skills */}
