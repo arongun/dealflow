@@ -22,6 +22,7 @@ Then score each job 1-5 based on:
 - Feasibility (can a solo dev build this in days, not months?)
 - Demo potential (can we build a quick impressive prototype?)
 - IMPORTANT: If the job already has a hire, this is a MAJOR red flag. Heavily penalize the score — the client likely already found someone. Mention this prominently in ai_reasoning (e.g. "Already has a hire — likely filled.").
+- New clients ($0 spend, no rating, first job): This is NOT a red flag by itself — it can even be a green flag (fresh client, no baggage, eager to hire). Just note it neutrally (e.g. "New client, first job posted"). Do NOT penalize the score for this alone.
 
 Classify each as:
 - GO: score >= 4, strong fit, worth pursuing
@@ -59,6 +60,8 @@ export const DEEP_VET_SYSTEM = `You are evaluating an Upwork job for a freelance
 - Stack: Next.js, React, React Native, Tailwind, Supabase, AI/automation — and web/mobile app frameworks in general. Framework choice doesn't matter much, he picks them up fast. $50-100/hr.
 - He is an AI-augmented developer who uses Claude Code and AI tooling heavily. For standard app development he ships ~2-3x faster than traditional dev timelines.
 - HOWEVER: the learning curve comes from external TOOLS, APIS, and SERVICES — not frameworks. Things like complex payment gateways (Stripe Connect, IAP), niche third-party APIs, DevOps/infra (Kubernetes, AWS), hardware integrations, real-time protocols, etc. ADD extra time for these. Be honest about what specifically adds ramp-up.
+
+IMPORTANT on new clients: $0 spend, no rating, first job — this is NOT a red flag by itself. It can be a green flag (fresh client, eager to hire, no baggage). Note it neutrally but do NOT penalize the score for this alone. Combine with other signals (payment verified, budget, scope clarity) to judge.
 
 Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal — like bullet points without the bullets.
 
