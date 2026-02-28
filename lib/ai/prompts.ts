@@ -4,7 +4,7 @@ Analyze the following raw text pasted from an Upwork search results page. Extrac
 
 For each job, extract:
 - title: the job title
-- description_snippet: first ~200 chars of description visible in search
+- description_snippet: copy the EXACT first ~200 characters of the job description text VERBATIM. Do NOT paraphrase, reword, or summarize — copy the original text character-for-character. This is critical for dedup matching.
 - budget_display: the budget shown (e.g. "$1,500-$3,000" or "$50-75/hr")
 - budget_type: "fixed" or "hourly" or "unknown"
 - client_location: country/location if shown

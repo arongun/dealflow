@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { callClaude, extractJSON } from '@/lib/ai/claude'
 import { BULK_PARSE_SYSTEM } from '@/lib/ai/prompts'
 import { bulkParseInputSchema, parseResultSchema, parsedJobSchema } from '@/lib/schemas'
-import { generateDedupHash, splitRawTextIntoChunks, extractChunkIdentity } from '@/lib/dedup'
+import { generateDedupHash, generateTitleHash, descriptionOverlap, OVERLAP_THRESHOLD, splitRawTextIntoChunks, extractChunkIdentity } from '@/lib/dedup'
 
 export const maxDuration = 300
 
@@ -72,16 +72,20 @@ export async function POST(request: NextRequest) {
   let totalPreFiltered = 0
 
   const [{ data: blockList }, { data: existingJobs }] = await Promise.all([
-    supabase.from('block_list').select('dedup_hash'),
-    supabase.from('jobs').select('dedup_hash'),
+    supabase.from('block_list').select('dedup_hash, title_hash, description_snippet'),
+    supabase.from('jobs').select('dedup_hash, title_hash, description_snippet'),
   ])
 
   const knownHashes = new Set<string>()
+  // Map title_hash → description_snippet for fuzzy matching
+  const knownTitleMap = new Map<string, string>()
   for (const b of blockList ?? []) {
     if (b.dedup_hash) knownHashes.add(b.dedup_hash)
+    if (b.title_hash) knownTitleMap.set(b.title_hash, b.description_snippet || '')
   }
   for (const j of existingJobs ?? []) {
     if (j.dedup_hash) knownHashes.add(j.dedup_hash)
+    if (j.title_hash) knownTitleMap.set(j.title_hash, j.description_snippet || '')
   }
 
   const newChunks: string[] = []
@@ -93,7 +97,10 @@ export async function POST(request: NextRequest) {
         continue
       }
       const hash = generateDedupHash(identity.title, identity.descSnippet)
+      const tHash = generateTitleHash(identity.title)
       if (knownHashes.has(hash)) {
+        totalPreFiltered++
+      } else if (knownTitleMap.has(tHash) && descriptionOverlap(identity.descSnippet, knownTitleMap.get(tHash)!) >= OVERLAP_THRESHOLD) {
         totalPreFiltered++
       } else {
         newChunks.push(chunk)
@@ -223,12 +230,19 @@ export async function POST(request: NextRequest) {
 
           for (const job of aiJobs) {
             const hash = generateDedupHash(job.title, job.description_snippet)
+            const tHash = generateTitleHash(job.title)
             if (knownHashes.has(hash)) {
               batchBlocked++
               continue
             }
-            // Add to known hashes so subsequent batches don't dupe
+            // Title match + description overlap = same job paraphrased differently
+            if (knownTitleMap.has(tHash) && descriptionOverlap(job.description_snippet || '', knownTitleMap.get(tHash)!) >= OVERLAP_THRESHOLD) {
+              batchBlocked++
+              continue
+            }
+            // Add to known sets so subsequent batches don't dupe
             knownHashes.add(hash)
+            knownTitleMap.set(tHash, job.description_snippet || '')
 
             const jobRecord = {
               title: job.title,
@@ -246,6 +260,7 @@ export async function POST(request: NextRequest) {
               ai_verdict: job.ai_verdict,
               ai_reasoning: job.ai_reasoning,
               dedup_hash: hash,
+              title_hash: tHash,
               saved_search_id,
               pipeline_stage: job.ai_verdict === 'NO-GO' ? 'rejected' : 'new',
             }
@@ -259,13 +274,13 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // Insert GO + NEEDS_REVIEW jobs
+          // Insert GO + NEEDS_REVIEW jobs (upsert as DB-level safety net)
           let insertedJobs: any[] = []
           const jobsToInsert = [...goJobs, ...reviewJobs]
           if (jobsToInsert.length > 0) {
             const { data: inserted, error: insertError } = await supabase
               .from('jobs')
-              .insert(jobsToInsert)
+              .upsert(jobsToInsert, { onConflict: 'dedup_hash', ignoreDuplicates: true })
               .select()
 
             if (insertError) {
@@ -286,11 +301,12 @@ export async function POST(request: NextRequest) {
               title: j.title,
               description_snippet: j.description_snippet,
               dedup_hash: j.dedup_hash,
+              title_hash: j.title_hash,
               reason: j.ai_reasoning,
               source_saved_search_id: saved_search_id,
             }))
             await supabase.from('block_list').insert(blockEntries)
-            await supabase.from('jobs').insert(noGoJobs)
+            await supabase.from('jobs').upsert(noGoJobs, { onConflict: 'dedup_hash', ignoreDuplicates: true })
           }
 
           totalParsed += aiJobs.length

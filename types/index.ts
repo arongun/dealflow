@@ -63,6 +63,7 @@ export interface Job {
   client_reply: string | null
   client_reply_draft: string | null
   dedup_hash: string | null
+  title_hash: string | null
   is_blocked: boolean
   notes: string | null
   created_at: string
@@ -113,6 +114,7 @@ export interface BlockListEntry {
   title: string
   description_snippet: string | null
   dedup_hash: string | null
+  title_hash: string | null
   reason: string | null
   source_saved_search_id: string | null
   created_at: string
