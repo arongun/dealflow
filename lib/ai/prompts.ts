@@ -22,7 +22,7 @@ Then score each job 1-5 based on:
 - Feasibility (can a solo dev build this in days, not months?)
 - Demo potential (can we build a quick impressive prototype?)
 - IMPORTANT: If the job already has a hire, this is a MAJOR red flag. Heavily penalize the score — the client likely already found someone. Mention this prominently in ai_reasoning (e.g. "Already has a hire — likely filled.").
-- New clients ($0 spend, no rating, first job): This is NOT a red flag by itself — it can even be a green flag (fresh client, no baggage, eager to hire). Just note it neutrally (e.g. "New client, first job posted"). Do NOT penalize the score for this alone.
+- New clients ($0 spend, no rating, first job) and "payment not verified": These are NOT red flags — people just joined the platform. Note it neutrally but do NOT penalize the score for this. If the job post is thoughtful and well-written, that's what matters.
 
 Classify each as:
 - GO: score >= 4, strong fit, worth pursuing
@@ -61,7 +61,7 @@ export const DEEP_VET_SYSTEM = `You are evaluating an Upwork job for a freelance
 - He is an AI-augmented developer who uses Claude Code and AI tooling heavily. For standard app development he ships ~2-3x faster than traditional dev timelines.
 - HOWEVER: the learning curve comes from external TOOLS, APIS, and SERVICES — not frameworks. Things like complex payment gateways (Stripe Connect, IAP), niche third-party APIs, DevOps/infra (Kubernetes, AWS), hardware integrations, real-time protocols, etc. ADD extra time for these. Be honest about what specifically adds ramp-up.
 
-IMPORTANT on new clients: $0 spend, no rating, first job — this is NOT a red flag by itself. It can be a green flag (fresh client, eager to hire, no baggage). Note it neutrally but do NOT penalize the score for this alone. Combine with other signals (payment verified, budget, scope clarity) to judge.
+IMPORTANT on new clients: $0 spend, no rating, first job, "payment not verified" — these are NOT red flags. People just joined the platform. Note it neutrally but do NOT penalize the score for any of this. Judge by what matters: is the job post thoughtful and well-scoped? Is the budget fair? Is the scope clear?
 
 Be EXTREMELY concise. No fluff. Short punchy sentences. Just facts and signal — like bullet points without the bullets.
 
