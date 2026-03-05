@@ -218,6 +218,7 @@ export function buildClaudeCodePromptUserMessage(job: {
   title: string
   full_description: string | null
   deep_vet_approach: string | null
+  upwork_link: string | null
   slug: string
   token: string
   password: string
@@ -231,6 +232,7 @@ Route: src/app/(demos)/${job.slug}/page.tsx
 Token: ${job.token}
 Password: ${job.password}
 Access URL: https://aronbuilds.vercel.app/${job.slug}?key=${job.token}
+Upwork Link: ${job.upwork_link || '[UPWORK_LINK]'}
 
 ## What to Build
 {1-2 sentences describing the overall demo concept and who it's for}

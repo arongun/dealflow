@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       title: job.title,
       full_description: job.full_description,
       deep_vet_approach: job.deep_vet_approach,
+      upwork_link: job.upwork_link,
       slug,
       token,
       password,
