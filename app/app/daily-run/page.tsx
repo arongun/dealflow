@@ -74,7 +74,7 @@ interface GeneratedContent {
 }
 
 type Phase = 'input' | 'parsed' | 'deep-vetted'
-type JobStatus = 'active' | 'skipped' | 'waiting' | 'went-go'
+type JobStatus = 'active' | 'skipped' | 'waiting' | 'went-go' | 'bailed'
 
 const VERDICT_OPTIONS = ['GO', 'NEEDS_REVIEW', 'NO-GO'] as const
 
@@ -126,7 +126,7 @@ export default function DailyRunPage() {
 
   // Phase 1 state
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
-  const [selectedSearchId, setSelectedSearchId] = useState<string>('')
+  const [selectedSearchId, setSelectedSearchId] = useState<string>('none')
   const [rawText, setRawText] = useState('')
   const [phase, setPhase] = useState<Phase>('input')
   const [parseLoading, setParseLoading] = useState(false)
@@ -162,6 +162,10 @@ export default function DailyRunPage() {
     } catch { return {} }
   })
 
+  // Re-run state
+  const [rerunOpen, setRerunOpen] = useState<Record<string, boolean>>({})
+  const [rerunLoading, setRerunLoading] = useState<Record<string, boolean>>({})
+
   // Per-job status state
   const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatus>>({})
 
@@ -184,7 +188,6 @@ export default function DailyRunPage() {
         if (res.ok) {
           const data = await res.json()
           setSavedSearches(data)
-          if (data.length > 0) setSelectedSearchId(data[0].id)
         }
       } catch {
         toast('Failed to load saved searches', 'error')
@@ -264,10 +267,6 @@ export default function DailyRunPage() {
       toast('Paste some job results first', 'error')
       return
     }
-    if (!selectedSearchId) {
-      toast('Select a saved search first', 'error')
-      return
-    }
 
     setParseLoading(true)
     setParseProgress('Starting analysis...')
@@ -277,7 +276,7 @@ export default function DailyRunPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           raw_text: rawText,
-          saved_search_id: selectedSearchId,
+          saved_search_id: selectedSearchId === 'none' ? null : selectedSearchId,
         }),
       })
 
@@ -474,7 +473,8 @@ export default function DailyRunPage() {
         fullDescriptions[j.id]?.trim() &&
         jobStatuses[j.id] !== 'skipped' &&
         jobStatuses[j.id] !== 'went-go' &&
-        jobStatuses[j.id] !== 'waiting'
+        jobStatuses[j.id] !== 'waiting' &&
+        jobStatuses[j.id] !== 'bailed'
     )
 
     if (jobsToVet.length === 0) {
@@ -483,11 +483,13 @@ export default function DailyRunPage() {
     }
 
     setDeepVetLoading(true)
+    setPhase('deep-vetted')
     let completed = 0
     let failed = 0
 
     for (const job of jobsToVet) {
       setDeepVetProgress(`Deep analyzing ${completed + 1}/${jobsToVet.length}: ${job.title.slice(0, 40)}...`)
+      setDeepVettingJobs(prev => ({ ...prev, [job.id]: true }))
       try {
         await deepVetSingleJob(job)
         completed++
@@ -495,10 +497,11 @@ export default function DailyRunPage() {
         failed++
         const msg = err instanceof Error ? err.message : 'Unknown error'
         toast(`Failed: "${job.title.slice(0, 30)}..." — ${msg}`, 'error')
+      } finally {
+        setDeepVettingJobs(prev => ({ ...prev, [job.id]: false }))
       }
     }
 
-    setPhase('deep-vetted')
     setDeepVetLoading(false)
     setDeepVetProgress('')
     toast(
@@ -510,6 +513,7 @@ export default function DailyRunPage() {
   // Per-job deep vet (for jobs in deep-vetted phase that weren't vetted initially)
   const handleSingleDeepVet = useCallback(
     async (job: DailyRunJob) => {
+      if (deepVetLoading) return
       if (!upworkLinks[job.id]?.trim() || !fullDescriptions[job.id]?.trim()) {
         toast('Fill in both the Upwork link and full description first', 'error')
         return
@@ -525,7 +529,7 @@ export default function DailyRunPage() {
         setDeepVettingJobs((prev) => ({ ...prev, [job.id]: false }))
       }
     },
-    [deepVetSingleJob, upworkLinks, fullDescriptions, toast]
+    [deepVetSingleJob, deepVetLoading, upworkLinks, fullDescriptions, toast]
   )
 
   // ── Actions ─────────────────────────────────────────────────
@@ -655,6 +659,23 @@ export default function DailyRunPage() {
     [toast]
   )
 
+  const handleBail = useCallback(
+    async (jobId: string) => {
+      try {
+        await fetch(`/api/jobs/${jobId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pipeline_stage: 'bailed' }),
+        })
+        setJobStatuses((prev) => ({ ...prev, [jobId]: 'bailed' }))
+        toast('Job marked as bailed', 'info')
+      } catch {
+        toast('Failed to update job', 'error')
+      }
+    },
+    [toast]
+  )
+
   const handleVerdictOverride = useCallback(
     async (jobId: string, newVerdict: string) => {
       // Find the original AI verdict for this job
@@ -717,6 +738,110 @@ export default function DailyRunPage() {
     [editedPrompts, editedScripts, editedProposals, toast]
   )
 
+  // ── Re-run analysis ──────────────────────────────────────────
+
+  const handleRerun = useCallback(
+    async (job: DailyRunJob) => {
+      const link = upworkLinks[job.id]?.trim()
+      const desc = fullDescriptions[job.id]?.trim()
+      if (!link || !desc) {
+        toast('Fill in the Upwork link and full description', 'error')
+        return
+      }
+
+      setRerunLoading((prev) => ({ ...prev, [job.id]: true }))
+      try {
+        // 1. Update job with new link + description
+        await fetch(`/api/jobs/${job.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ upwork_link: link, full_description: desc }),
+        })
+
+        // 2. Re-run deep vet
+        const vetRes = await fetch('/api/jobs/deep-vet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jobs: [{
+              id: job.id,
+              title: job.title,
+              budget_display: job.budget_display,
+              ai_score: job.ai_score,
+              client_location: job.client_location,
+              client_spend: job.client_spend,
+              client_rating: job.client_rating,
+              full_description: desc,
+              upwork_link: link,
+            }],
+          }),
+        })
+        if (!vetRes.ok) throw new Error('Deep vet failed')
+        const vetData = await vetRes.json()
+        const vetResult = vetData.results?.[0]?.result
+        if (vetResult) {
+          setJobs((prev) =>
+            prev.map((j) =>
+              j.id === job.id
+                ? { ...j, upwork_link: link, full_description: desc, ...vetResult }
+                : j
+            )
+          )
+        }
+
+        // 3. Regenerate content if previously generated
+        const hadContent = job.claude_code_prompt || job.loom_script || job.proposal_text || generatedContent[job.id]
+        if (hadContent) {
+          const [promptRes, scriptRes, proposalRes] = await Promise.all([
+            fetch('/api/generate/claude-prompt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: job.id }),
+            }),
+            fetch('/api/generate/loom-script', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: job.id }),
+            }),
+            fetch('/api/generate/proposal', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: job.id }),
+            }),
+          ])
+
+          const newContent: GeneratedContent = {}
+          if (promptRes.ok) {
+            const d = await promptRes.json()
+            newContent.prompt = d.claude_code_prompt
+          }
+          if (scriptRes.ok) {
+            const d = await scriptRes.json()
+            newContent.script = d.loom_script
+          }
+          if (proposalRes.ok) {
+            const d = await proposalRes.json()
+            newContent.proposal = d.proposal_text
+          }
+
+          setGeneratedContent((prev) => ({ ...prev, [job.id]: { ...prev[job.id], ...newContent } }))
+          // Reset edited versions so they pick up new content
+          setEditedPrompts((prev) => { const n = { ...prev }; delete n[job.id]; return n })
+          setEditedScripts((prev) => { const n = { ...prev }; delete n[job.id]; return n })
+          setEditedProposals((prev) => { const n = { ...prev }; delete n[job.id]; return n })
+        }
+
+        setRerunOpen((prev) => ({ ...prev, [job.id]: false }))
+        toast('Re-analysis complete', 'success')
+      } catch {
+        toast('Re-analysis failed', 'error')
+      } finally {
+        setRerunLoading((prev) => ({ ...prev, [job.id]: false }))
+      }
+    },
+    [upworkLinks, fullDescriptions, generatedContent, toast]
+  )
+
   // ── Derived state ───────────────────────────────────────────
 
   const deepVetReady = jobs.some(
@@ -727,7 +852,7 @@ export default function DailyRunPage() {
   )
 
   const activeJobs = jobs.filter(
-    (j) => jobStatuses[j.id] !== 'skipped'
+    (j) => jobStatuses[j.id] !== 'skipped' && jobStatuses[j.id] !== 'bailed'
   )
 
   // ── Reset ───────────────────────────────────────────────────
@@ -753,6 +878,8 @@ export default function DailyRunPage() {
     setEditedScripts({})
     setEditedProposals({})
     setSavingContent({})
+    setRerunOpen({})
+    setRerunLoading({})
     localStorage.removeItem('dailyrun_upworkLinks')
     localStorage.removeItem('dailyrun_fullDescriptions')
   }, [])
@@ -802,9 +929,7 @@ export default function DailyRunPage() {
               onChange={(e) => setSelectedSearchId(e.target.value)}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
             >
-              {savedSearches.length === 0 && (
-                <option value="">No saved searches</option>
-              )}
+              <option value="none">No Saved Search</option>
               {savedSearches.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} {s.platform ? `(${s.platform})` : ''}
@@ -832,7 +957,7 @@ export default function DailyRunPage() {
               </span>
               <button
                 onClick={handleParse}
-                disabled={parseLoading || !rawText.trim() || !selectedSearchId}
+                disabled={parseLoading || !rawText.trim()}
                 className="rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {parseLoading ? (
@@ -1069,6 +1194,11 @@ export default function DailyRunPage() {
                             Waiting
                           </span>
                         )}
+                        {status === 'bailed' && (
+                          <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
+                            Bailed
+                          </span>
+                        )}
                         {status === 'went-go' && (
                           <span className="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
                             GO
@@ -1153,6 +1283,25 @@ export default function DailyRunPage() {
                         </span>
                       </div>
                     )}
+
+                    {/* Upwork link on deep-vetted cards */}
+                    {hasDeepVet && (() => {
+                      const link = job.upwork_link || upworkLinks[job.id]
+                      if (!link || !link.startsWith('http')) return null
+                      return (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition"
+                        >
+                          View on Upwork
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                          </svg>
+                        </a>
+                      )
+                    })()}
 
                     {/* ─── Inputs (pre deep vet) ────────────────── */}
 
@@ -1269,6 +1418,12 @@ export default function DailyRunPage() {
                           >
                             Wait
                           </button>
+                          <button
+                            onClick={() => handleBail(job.id)}
+                            className="rounded-lg bg-amber-500/20 px-3 py-2 text-sm text-amber-400 transition hover:bg-amber-500/30"
+                          >
+                            Bail
+                          </button>
                           <div className="ml-auto flex items-center gap-2">
                             {skipInputOpen[job.id] ? (
                               <>
@@ -1318,6 +1473,16 @@ export default function DailyRunPage() {
                     {phase === 'deep-vetted' &&
                       !hasDeepVet &&
                       status === 'active' && (
+                        deepVettingJobs[job.id] ? (
+                          <div className="mt-4 flex items-center gap-2 text-sm text-zinc-400">
+                            <LoadingDots />
+                            <span>Analyzing...</span>
+                          </div>
+                        ) : deepVetLoading ? (
+                          <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+                            <span>Queued...</span>
+                          </div>
+                        ) : (
                         <div className="mt-4 space-y-3">
                           <div>
                             <label className="mb-1 block text-xs font-medium text-zinc-500">
@@ -1355,7 +1520,7 @@ export default function DailyRunPage() {
                           <div className="flex items-center justify-between">
                             <button
                               onClick={() => handleSingleDeepVet(job)}
-                              disabled={deepVettingJobs[job.id] || !upworkLinks[job.id]?.trim() || !fullDescriptions[job.id]?.trim()}
+                              disabled={deepVettingJobs[job.id] || deepVetLoading || !upworkLinks[job.id]?.trim() || !fullDescriptions[job.id]?.trim()}
                               className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {deepVettingJobs[job.id] ? (
@@ -1410,6 +1575,82 @@ export default function DailyRunPage() {
                               )}
                             </div>
                           </div>
+                        </div>
+                      ))}
+
+                    {/* ─── Re-run Analysis ──────────────────────── */}
+
+                    {phase === 'deep-vetted' &&
+                      hasDeepVet &&
+                      (status === 'active' || status === 'went-go') && (
+                        <div className="mt-4">
+                          {rerunLoading[job.id] ? (
+                            <div className="flex items-center gap-2 text-sm text-zinc-400">
+                              <LoadingDots />
+                              <span>Re-analyzing and regenerating...</span>
+                            </div>
+                          ) : rerunOpen[job.id] ? (
+                            <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-zinc-400">Re-run Analysis</span>
+                                <button
+                                  onClick={() => setRerunOpen((prev) => ({ ...prev, [job.id]: false }))}
+                                  className="text-xs text-zinc-500 transition hover:text-zinc-300"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                                  Upwork Link
+                                </label>
+                                <input
+                                  type="text"
+                                  value={upworkLinks[job.id] ?? job.upwork_link ?? ''}
+                                  onChange={(e) =>
+                                    setUpworkLinks((prev) => ({ ...prev, [job.id]: e.target.value }))
+                                  }
+                                  placeholder="https://www.upwork.com/jobs/~..."
+                                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-zinc-500">
+                                  Full Job Description
+                                </label>
+                                <textarea
+                                  value={fullDescriptions[job.id] ?? job.full_description ?? ''}
+                                  onChange={(e) =>
+                                    setFullDescriptions((prev) => ({ ...prev, [job.id]: e.target.value }))
+                                  }
+                                  placeholder="Paste the full job description..."
+                                  className="min-h-[120px] w-full resize-y rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
+                                />
+                              </div>
+                              <button
+                                onClick={() => handleRerun(job)}
+                                className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200"
+                              >
+                                Run Re-analysis
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                // Pre-fill with current values if not already set
+                                if (!upworkLinks[job.id] && job.upwork_link) {
+                                  setUpworkLinks((prev) => ({ ...prev, [job.id]: job.upwork_link! }))
+                                }
+                                if (!fullDescriptions[job.id] && job.full_description) {
+                                  setFullDescriptions((prev) => ({ ...prev, [job.id]: job.full_description! }))
+                                }
+                                setRerunOpen((prev) => ({ ...prev, [job.id]: true }))
+                              }}
+                              className="text-xs text-zinc-500 transition hover:text-zinc-300"
+                            >
+                              Re-run Analysis
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -1768,6 +2009,12 @@ export default function DailyRunPage() {
                     className="rounded-lg bg-zinc-800 px-4 py-2 text-sm text-zinc-400 transition hover:bg-zinc-700 hover:text-zinc-300"
                   >
                     Wait
+                  </button>
+                  <button
+                    onClick={() => { handleBail(job.id); setDetailJobId(null) }}
+                    className="rounded-lg bg-amber-500/20 px-4 py-2 text-sm text-amber-400 transition hover:bg-amber-500/30"
+                  >
+                    Bail
                   </button>
                   <button
                     onClick={() => { handleSkipConfirm(job.id); setDetailJobId(null) }}

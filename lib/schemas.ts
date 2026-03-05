@@ -52,7 +52,7 @@ export const jobUpdateSchema = z.object({
   pipeline_stage: z
     .enum([
       'new', 'go', 'building', 'ready', 'applied',
-      'replied', 'won', 'lost', 'rejected', 'waiting',
+      'replied', 'won', 'lost', 'rejected', 'waiting', 'bailed',
     ])
     .optional(),
   build_type: z.enum(['build', 'loom_only']).nullable().optional(),
@@ -78,7 +78,7 @@ export const jobUpdateSchema = z.object({
 
 export const bulkParseInputSchema = z.object({
   raw_text: z.string().min(1),
-  saved_search_id: z.string().uuid(),
+  saved_search_id: z.string().uuid().nullable().optional(),
 })
 
 export const deepVetInputSchema = z.object({

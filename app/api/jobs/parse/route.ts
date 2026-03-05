@@ -64,7 +64,8 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { raw_text, saved_search_id } = parsed.data
+  const { raw_text } = parsed.data
+  const savedSearchId = parsed.data.saved_search_id ?? null
   const startTime = Date.now()
 
   // ── Pre-AI Dedup: split text into chunks and filter out known jobs ──
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     if (newChunks.length === 0) {
       const duration = Date.now() - startTime
       await supabase.from('run_history').insert({
-        saved_search_id,
+        saved_search_id: savedSearchId,
         saved_search_name: null,
         total_pasted: chunks.length,
         total_parsed: 0,
@@ -261,7 +262,7 @@ export async function POST(request: NextRequest) {
               ai_reasoning: job.ai_reasoning,
               dedup_hash: hash,
               title_hash: tHash,
-              saved_search_id,
+              saved_search_id: savedSearchId,
               pipeline_stage: job.ai_verdict === 'NO-GO' ? 'rejected' : 'new',
             }
 
@@ -303,7 +304,7 @@ export async function POST(request: NextRequest) {
               dedup_hash: j.dedup_hash,
               title_hash: j.title_hash,
               reason: j.ai_reasoning,
-              source_saved_search_id: saved_search_id,
+              source_saved_search_id: savedSearchId,
             }))
             await supabase.from('block_list').insert(blockEntries)
             await supabase.from('jobs').insert(noGoJobs)
@@ -338,28 +339,30 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // ── Update saved search stats ──
-      const { data: currentSearch } = await supabase
-        .from('saved_searches')
-        .select('total_jobs_found, total_go, total_no_go')
-        .eq('id', saved_search_id)
-        .single()
-
-      if (currentSearch) {
-        await supabase
+      // ── Update saved search stats (skip if no saved search) ──
+      if (savedSearchId) {
+        const { data: currentSearch } = await supabase
           .from('saved_searches')
-          .update({
-            total_jobs_found: (currentSearch.total_jobs_found ?? 0) + totalParsed,
-            total_go: (currentSearch.total_go ?? 0) + totalGo,
-            total_no_go: (currentSearch.total_no_go ?? 0) + totalNoGo,
-          })
-          .eq('id', saved_search_id)
+          .select('total_jobs_found, total_go, total_no_go')
+          .eq('id', savedSearchId)
+          .single()
+
+        if (currentSearch) {
+          await supabase
+            .from('saved_searches')
+            .update({
+              total_jobs_found: (currentSearch.total_jobs_found ?? 0) + totalParsed,
+              total_go: (currentSearch.total_go ?? 0) + totalGo,
+              total_no_go: (currentSearch.total_no_go ?? 0) + totalNoGo,
+            })
+            .eq('id', savedSearchId)
+        }
       }
 
       // ── Save run history ──
       const duration = Date.now() - startTime
       await supabase.from('run_history').insert({
-        saved_search_id,
+        saved_search_id: savedSearchId,
         saved_search_name: null,
         total_pasted: (chunks.length > 0 ? chunks.length : totalParsed) + totalPreFiltered,
         total_parsed: totalParsed,

@@ -9,6 +9,7 @@ export type PipelineStage =
   | 'lost'
   | 'rejected'
   | 'waiting'
+  | 'bailed'
 
 export type AiVerdict = 'GO' | 'NO-GO' | 'NEEDS_REVIEW' | 'pending'
 

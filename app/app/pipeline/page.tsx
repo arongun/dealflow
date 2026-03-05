@@ -19,6 +19,7 @@ type PipelineStage =
   | 'lost'
   | 'rejected'
   | 'waiting'
+  | 'bailed'
 
 interface Job {
   id: string
@@ -93,6 +94,7 @@ const COLUMNS: { stage: PipelineStage; label: string; description: string }[] = 
   { stage: 'lost', label: 'Closed Lost', description: '' },
   { stage: 'waiting', label: 'Waiting', description: 'On hold' },
   { stage: 'rejected', label: 'Rejected', description: '' },
+  { stage: 'bailed', label: 'Bailed', description: 'Missed opportunity' },
 ]
 
 const ALL_STAGES: { value: PipelineStage; label: string }[] = [
@@ -106,6 +108,7 @@ const ALL_STAGES: { value: PipelineStage; label: string }[] = [
   { value: 'lost', label: 'Closed Lost' },
   { value: 'waiting', label: 'Waiting' },
   { value: 'rejected', label: 'Rejected' },
+  { value: 'bailed', label: 'Bailed' },
 ]
 
 // ---------------------------------------------------------------------------
